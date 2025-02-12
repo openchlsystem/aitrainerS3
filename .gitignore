@@ -41,6 +41,6 @@ htmlcov/
 *.cover
 
 # Migrations (optional - keep if you want migrations tracked)
-**/migrations/*.py
-!**/migrations/__init__.py
+s3/**/migrations/*.py
+!s3/**/migrations/__init__.py
 
