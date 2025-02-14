@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import (
-    AudioFile, evaluated_audio_file, CaseRecord, evaluation_record, AudioFileChunk, evaluation_results
+    AudioFile, cleaned_audio_file, CaseRecord, evaluation_record, AudioFileChunk, evaluation_results
 )
 
 class AudioFileSerializer(serializers.ModelSerializer):
@@ -8,9 +8,9 @@ class AudioFileSerializer(serializers.ModelSerializer):
         model = AudioFile
         fields = '__all__'
 
-class EvaluatedAudioFileSerializer(serializers.ModelSerializer):
+class CleanedAudioFileSerializer(serializers.ModelSerializer):
     class Meta:
-        model = evaluated_audio_file
+        model = cleaned_audio_file
         fields = '__all__'
 
 class CaseRecordSerializer(serializers.ModelSerializer):

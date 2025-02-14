@@ -1,8 +1,8 @@
 from django.urls import path
 from .views import (
     AudioFileListCreateView, AudioFileDetailView,
-    EvaluatedAudioFileListCreateView, EvaluatedAudioFileDetailView,
-    CaseRecordListCreateView, CaseRecordDetailView,
+    CleanedAudioFileListCreateView, CleanedAudioFileDetailView,
+    CaseRecordListCreateView, CaseRecordDetailView, CleanedAudioFileViewSet,
     EvaluationRecordListCreateView, EvaluationRecordDetailView,
     AudioFileChunkListCreateView, AudioFileChunkDetailView,
     EvaluationResultsListCreateView, EvaluationResultsDetailView
@@ -14,8 +14,8 @@ urlpatterns = [
     path('audio-files/<uuid:pk>/', AudioFileDetailView.as_view(), name='audiofile-detail'),
 
     # ✅ EvaluatedAudioFile URLs
-    path('evaluated-audio/', EvaluatedAudioFileListCreateView.as_view(), name='evaluated-audio-list'),
-    path('evaluated-audio/<uuid:pk>/', EvaluatedAudioFileDetailView.as_view(), name='evaluated-audio-detail'),
+    path('evaluated-audio/', CleanedAudioFileListCreateView.as_view(), name='evaluated-audio-list'),
+    path('evaluated-audio/<uuid:pk>/', CleanedAudioFileDetailView.as_view(), name='evaluated-audio-detail'),
 
     # ✅ CaseRecord URLs
     path('case-records/', CaseRecordListCreateView.as_view(), name='caserecord-list'),
@@ -32,4 +32,11 @@ urlpatterns = [
     # ✅ EvaluationResults URLs
     path('evaluation-results/', EvaluationResultsListCreateView.as_view(), name='evaluationresults-list'),
     path('evaluation-results/<uuid:pk>/', EvaluationResultsDetailView.as_view(), name='evaluationresults-detail'),
+
+      # List all cleaned audio files
+    path('cleaned-audio-files/', CleanedAudioFileViewSet.as_view({'get': 'list'}), name='cleaned_audio_file_list'),
+    
+    # Update the is_evaluated status of a specific cleaned audio file
+    path('cleaned-audio-files/<int:pk>/toggle_evaluated/', CleanedAudioFileViewSet.as_view({'patch': 'toggle_evaluated'}), name='toggle_evaluated'),
+
 ]
