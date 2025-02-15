@@ -14,7 +14,7 @@ def handle_cleaned_audio_file_save(sender, instance, created, **kwargs):
     if instance.is_evaluated:
         # Call the chunk splitting function
         num_chunks = split_and_save_chunks(
-            cleaned_audio_obj=instance,
+            audio_obj=instance,
             output_format='wav',                # Output format
             min_chunk_length_ms=3000,          # Minimum chunk length in ms
             max_chunk_length_ms=7000,          # Maximum chunk length in ms
