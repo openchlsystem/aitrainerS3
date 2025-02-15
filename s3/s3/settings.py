@@ -45,9 +45,11 @@ INSTALLED_APPS = [
     'django_filters',
     
     "transcriptions",
+    "authapp",
 ]
 
 MIDDLEWARE = [
+    "corsheaders.middleware.CorsMiddleware",  # Must be at the top
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -129,3 +131,13 @@ STATIC_URL = "static/"
 # https://docs.djangoproject.com/en/5.1/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
+
+CORS_ALLOW_ALL_ORIGINS = True  # Allow all domains to access the API
+CORS_ALLOW_CREDENTIALS = True  # Allow sending cookies & authentication headers
+
+
+# CORS_ALLOWED_ORIGINS = [
+#     "http://localhost:5173",  # Vite frontend
+#     "https://your-production-site.com",
+# ]
