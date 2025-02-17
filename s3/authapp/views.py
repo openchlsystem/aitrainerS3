@@ -40,13 +40,25 @@ from django.contrib.auth.models import User
 
 otp_store = {}
 
+import random
+import requests
+import logging
+from django.core.exceptions import ObjectDoesNotExist
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from django.contrib.auth.models import User
+import time
+
+otp_store = {}  # Temporary OTP storage
+
 class RequestOTPView(APIView):
     def post(self, request):
         whatsapp_number = request.data.get("whatsapp_number")
         org_id = 1  # Assuming org_id is provided in request
 
-        if not org_id:
-            return Response({"error": "Organization ID is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not whatsapp_number:
+            return Response({"error": "WhatsApp number is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             user = User.objects.get(username=whatsapp_number)
@@ -56,11 +68,49 @@ class RequestOTPView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
+        # Send message to webhook before OTP
+        webhook_url = "https://backend.bitz-itc.com/api/whatsapp/webhook/"
+        webhook_payload = {
+            "object": "whatsapp_business_account",
+            "entry": [{
+                "id": "101592599705197",
+                "changes": [{
+                    "value": {
+                        "messaging_product": "whatsapp",
+                        "metadata": {
+                            "phone_number_id": "555567910973933"
+                        },
+                        "contacts": [{
+                            "profile": {"name": user.get_full_name() or "WhatsApp User"},
+                            "wa_id": whatsapp_number
+                        }],
+                        "messages": [{
+                            "from": whatsapp_number,
+                            "id": f"wamid.{random.randint(100000, 999999)}",
+                            "timestamp": str(int(time.time())),
+                            "text": {"body": "I am requesting for an OTP"},
+                            "type": "text"
+                        }]
+                    },
+                    "field": "messages"
+                }]
+            }]
+        }
+
+        try:
+            webhook_response = requests.post(
+                webhook_url, json=webhook_payload, headers={"Content-Type": "application/json"}
+            )
+            if webhook_response.status_code != 200:
+                logging.error(f"Failed to notify webhook: {webhook_response.text}")
+        except requests.RequestException as e:
+            logging.error(f"Error sending webhook message: {e}")
+
         # Generate a 6-digit OTP
         otp = str(random.randint(100000, 999999))
         otp_store[whatsapp_number] = otp  # Store OTP temporarily
 
-        # Construct the message
+        # Construct the OTP message
         otp_message = f"Your OTP is: {otp}. It expires in 5 minutes."
 
         # Send OTP via WhatsApp API
@@ -90,7 +140,6 @@ class RequestOTPView(APIView):
                 {"error": "Failed to send OTP. Please try again later."},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
-
 
 from rest_framework_simplejwt.tokens import RefreshToken
 

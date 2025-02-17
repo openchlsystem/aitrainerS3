@@ -197,3 +197,137 @@ def chunk_statistics(request):
         "total_unevaluated_chunks": total_unevaluated_chunks,
     }
     return JsonResponse(statistics)
+
+
+# Batch audio file input 
+
+import os
+import logging
+import json
+import subprocess
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt
+from django.core.files import File
+from .models import AudioFile
+from pydub.utils import mediainfo  # Faster metadata extraction
+from django.core.files.storage import default_storage
+from django.core.files.base import ContentFile
+
+logger = logging.getLogger(__name__)
+
+@csrf_exempt
+def process_audio_folder(request):
+    if request.method == "POST":
+        try:
+            files = request.FILES.getlist("files")  # Handle file uploads
+
+            if not files:
+                return JsonResponse({"error": "No files provided."}, status=400)
+
+            processed_files = process_audio_files_from_uploaded(files)  # Process uploaded files
+            return JsonResponse({"message": f"Processed {processed_files} audio files."})
+
+        except Exception as e:
+            print(f"❌ Error processing files: {e}")
+            return JsonResponse({"error": "Failed to process files."}, status=500)
+
+    return JsonResponse({"error": "Invalid request method."}, status=405)
+
+def process_audio_files_from_uploaded(files):
+    """Processes uploaded audio files directly."""
+    processed_count = 0
+
+    for file in files:
+        filename = file.name
+        print(f"📂 Processing uploaded file: {filename}")
+
+        if filename.endswith((".ogg", ".wav")):  # Check if file is Ogg or WAV
+            try:
+                # ✅ Save the file temporarily
+                temp_path = default_storage.save(f"temp/{filename}", ContentFile(file.read()))
+
+                # Convert Ogg to WAV if the file is Ogg Vorbis
+                if filename.endswith(".ogg"):
+                    wav_filename = filename.replace(".ogg", ".wav")
+                    wav_temp_path = convert_ogg_to_wav(temp_path, wav_filename)
+                    if not wav_temp_path:
+                        print(f"⚠️ Skipping {filename} due to conversion failure.")
+                        continue
+                    temp_path = wav_temp_path  # Use the new WAV file for further processing
+                    filename = wav_filename  # Update the filename to .wav
+
+                # ✅ Extract metadata
+                duration, file_size = get_audio_metadata(temp_path)
+
+                if duration is None or file_size is None:
+                    print(f"⚠️ Skipping {filename} due to metadata extraction failure.")
+                    continue
+
+                # ✅ Save file to database
+                audio_id = os.path.splitext(filename)[0]
+                audio_file_instance, created = AudioFile.objects.get_or_create(
+                    audio_id=audio_id,
+                    defaults={"duration": duration, "file_size": file_size}
+                )
+
+                if not created:
+                    updated = False
+                    if audio_file_instance.duration is None:
+                        audio_file_instance.duration = duration
+                        updated = True
+                    if audio_file_instance.file_size is None:
+                        audio_file_instance.file_size = file_size
+                        updated = True
+                    if updated:
+                        audio_file_instance.save()
+
+                # ✅ Save file in Django FileField
+                if not audio_file_instance.audio_file:
+                    with open(temp_path, "rb") as f:
+                        audio_file_instance.audio_file.save(filename, File(f), save=True)
+
+                processed_count += 1
+
+                # ✅ Delete temp file after processing
+                default_storage.delete(temp_path)
+
+            except Exception as e:
+                print(f"❌ Error processing file {filename}: {e}")
+
+    return processed_count
+
+def convert_ogg_to_wav(input_path, output_filename):
+    """Convert Ogg Vorbis audio to WAV format using ffmpeg."""
+    output_path = os.path.join(os.path.dirname(input_path), output_filename)
+    try:
+        subprocess.run(
+            ["ffmpeg", "-i", input_path, output_path],
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        print(f"✅ Converted {input_path} to {output_path}")
+        return output_path
+    except subprocess.CalledProcessError as e:
+        print(f"❌ Error converting {input_path} to WAV: {e}")
+        return None
+
+def get_audio_metadata(filepath):
+    """Extract metadata using ffprobe"""
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "format=duration,size", 
+             "-of", "json", filepath],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+        metadata = json.loads(result.stdout)
+        duration = float(metadata["format"]["duration"])
+        file_size = int(metadata["format"]["size"])
+        return duration, file_size
+    except Exception as e:
+        print(f"❌ Error extracting metadata for {filepath}: {e}")
+        return None, None
+
+
