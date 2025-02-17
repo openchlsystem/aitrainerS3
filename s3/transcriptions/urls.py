@@ -5,7 +5,7 @@ from .views import (
     CaseRecordListCreateView, CaseRecordDetailView, CleanedAudioFileViewSet,
     EvaluationRecordListCreateView, EvaluationRecordDetailView,
     AudioFileChunkListCreateView, AudioFileChunkDetailView,
-    EvaluationResultsListCreateView, EvaluationResultsDetailView, chunk_statistics, evaluate_chunk
+    EvaluationResultsListCreateView, EvaluationResultsDetailView, chunk_statistics, evaluate_chunk, process_audio_folder
 )
 
 urlpatterns = [
@@ -42,6 +42,9 @@ urlpatterns = [
 
     path('evaluate-chunk/<int:chunk_id>/', evaluate_chunk, name='evaluate_chunk'),
     path('chunk-statistics/', chunk_statistics, name='chunk-statistics'),
-
+    
+    
+    # Bulk Audio file processing 
+    path("process-audio/", process_audio_folder, name="process_audio"),
 
 ]

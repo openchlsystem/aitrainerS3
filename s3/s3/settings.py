@@ -147,3 +147,8 @@ CORS_ALLOW_CREDENTIALS = True  # Allow sending cookies & authentication headers
 #     "http://localhost:5173",  # Vite frontend
 #     "https://your-production-site.com",
 # ]
+
+
+
+DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB (adjust as needed)
+
