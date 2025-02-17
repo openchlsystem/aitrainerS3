@@ -31,7 +31,8 @@ class AudioFile(base_model):
 class cleaned_audio_file(base_model):
     # audio_id = models.OneToOneField(AudioFile, on_delete=models.CASCADE, related_name="evaluated_audio_file",null=True,unique=True)
     audio_file = models.FileField(upload_to="cleaned-audio/")
-    is_evaluated = models.BooleanField(default=False)
+    is_approved = models.BooleanField(default=False)
+    is_disapproved = models.BooleanField(default=False)
     file_size = models.PositiveIntegerField(null=True)
     duration = models.FloatField(null=True)
     # is_evaluated_by = models.CharField(max_length=50, null=True)

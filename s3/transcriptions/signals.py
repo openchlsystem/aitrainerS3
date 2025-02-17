@@ -11,7 +11,7 @@ def handle_cleaned_audio_file_save(sender, instance, created, **kwargs):
     Signal that listens for the post_save event of the cleaned_audio_file model.
     If is_evaluated is True, it triggers the split_and_save_chunks function.
     """
-    if instance.is_evaluated:
+    if instance.is_approved:
         # Call the chunk splitting function
         num_chunks = split_and_save_chunks(
             audio_obj=instance,

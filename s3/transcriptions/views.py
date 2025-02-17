@@ -101,18 +101,40 @@ class EvaluationResultsDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = EvaluationResultsSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-
 class CleanedAudioFileViewSet(viewsets.ModelViewSet):
-    queryset = cleaned_audio_file.objects.all()
     serializer_class = CleanedAudioFileSerializer
 
+    def get_queryset(self):
+            """
+            Override the default queryset to:
+            - Return all audio files.
+            - Return filtered records where `is_approved == False` and `is_disapproved == False` when `pending` query param is set to `true`.
+            """
+            queryset = cleaned_audio_file.objects.all()
+            
+            # Apply filter only if 'pending=true' is passed in query parameters
+            pending_filter = self.request.query_params.get('pending', None)
+            if pending_filter == 'true':
+                queryset = queryset.filter(is_approved=False, is_disapproved=False)
+            
+            return queryset
+
     @action(detail=True, methods=["patch"])
-    def toggle_evaluated(self, request, pk=None):
+    def toggle_approved(self, request, pk=None):
         cleaned_audio = self.get_object()
-        cleaned_audio.is_evaluated = not cleaned_audio.is_evaluated
+        cleaned_audio.is_approved = not cleaned_audio.is_approved
         cleaned_audio.save()
         return Response(
-            {"status": "updated", "is_evaluated": cleaned_audio.is_evaluated}
+            {"status": "updated", "is_approved": cleaned_audio.is_approved}
+        )
+    
+    @action(detail=True, methods=["patch"])
+    def toggle_disapproved(self, request, pk=None):
+        cleaned_audio = self.get_object()
+        cleaned_audio.is_disapproved = not cleaned_audio.is_disapproved
+        cleaned_audio.save()
+        return Response(
+            {"status": "updated", "is_disapproved": cleaned_audio.is_disapproved}
         )
 
 
@@ -141,7 +163,7 @@ def evaluate_chunk(request, chunk_id):
     prolonged_silence = str(data.get("prolonged_silence", "false")).lower() == "true"
     not_speech_rate = str(data.get("not_speech_rate", "false")).lower() == "true"
     echo_noise = str(data.get("echo_noise", "false")).lower() == "true"
-    # is_evaluated = str(data.get('is_evaluated', 'false')).lower() == 'true'
+    # is_apporved = str(data.get('is_evaluated', 'false')).lower() == 'true'
     evaluation_notes = data.get("evaluation_notes", "")
 
     evaluation, created = evaluation_results.objects.update_or_create(

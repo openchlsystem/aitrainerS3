@@ -37,7 +37,8 @@ urlpatterns = [
     path('cleaned-audio-files/', CleanedAudioFileViewSet.as_view({'get': 'list'}), name='cleaned_audio_file_list'),
     
     # Update the is_evaluated status of a specific cleaned audio file
-    path('cleaned-audio-files/<int:pk>/toggle_evaluated/', CleanedAudioFileViewSet.as_view({'patch': 'toggle_evaluated'}), name='toggle_evaluated'),
+    path('cleaned-audio-files/<int:pk>/approve/', CleanedAudioFileViewSet.as_view({'patch': 'toggle_approved'}), name='toggle_approved'),
+    path('cleaned-audio-files/<int:pk>/disapprove/', CleanedAudioFileViewSet.as_view({'patch': 'toggle_disapproved'}), name='toggle_disapproved'),
 
     path('evaluate-chunk/<int:chunk_id>/', evaluate_chunk, name='evaluate_chunk'),
     path('chunk-statistics/', chunk_statistics, name='chunk-statistics'),
