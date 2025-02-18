@@ -1,4 +1,7 @@
 from django.shortcuts import render
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.permissions import AllowAny
+from rest_framework.decorators import api_view, permission_classes
 
 # Create your views here.
 import pyotp
@@ -51,6 +54,7 @@ from django.contrib.auth.models import User
 import time
 
 otp_store = {}  # Temporary OTP storage
+@permission_classes([AllowAny])
 
 class RequestOTPView(APIView):
     def post(self, request):
@@ -141,9 +145,10 @@ class RequestOTPView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-from rest_framework_simplejwt.tokens import RefreshToken
 
+@permission_classes([AllowAny])
 class VerifyOTPView(APIView):
+
     def post(self, request):
         whatsapp_number = request.data.get("whatsapp_number")
         otp = request.data.get("otp")
@@ -166,12 +171,13 @@ class VerifyOTPView(APIView):
 
         return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
-
 from django.contrib.auth.models import User
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from django.core.exceptions import ObjectDoesNotExist
+
+@permission_classes([AllowAny])
 
 class RegisterUserView(APIView):
     def post(self, request):

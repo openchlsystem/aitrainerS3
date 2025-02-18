@@ -95,6 +95,21 @@ DATABASES = {
 }
 
 
+# diable on local 
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.mysql",
+#         "NAME": "aitainer_data",
+#         "USER":"root",
+#         "HOST":"localhost",
+#         "PORT":'',
+#        'OPTIONS': {
+#             'unix_socket': '/var/lib/mysql/mysql.sock',  
+#         },
+#     }
+# }
+
+
 # Password validation
 # https://docs.djangoproject.com/en/5.1/ref/settings/#auth-password-validators
 
@@ -152,3 +167,12 @@ CORS_ALLOW_CREDENTIALS = True  # Allow sending cookies & authentication headers
 
 DATA_UPLOAD_MAX_MEMORY_SIZE = 52428800  # 50MB (adjust as needed)
 
+REST_FRAMEWORK = {
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'rest_framework.authentication.TokenAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+}

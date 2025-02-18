@@ -116,16 +116,26 @@ class CleanedAudioFileViewSet(viewsets.ModelViewSet):
         )
 
 
+from django.contrib.auth.models import User
+from django.utils.timezone import now
+from django.http import JsonResponse
+from django.shortcuts import get_object_or_404
+import json
+
 @csrf_exempt
+
+
 def evaluate_chunk(request, chunk_id):
     if request.method != "POST":
         return JsonResponse({"error": "Method not allowed"}, status=405)
 
     chunk = get_object_or_404(AudioFileChunk, id=chunk_id)
-    # user = request.user  # Get current logged-in user
-    user = "Unknown"  # Get current logged-in user
+    user = request.user  # ✅ Ensure user is authenticated
 
-    # Parse the request data depending on the content type
+    if not user.is_authenticated:
+        return JsonResponse({"error": "User must be logged in"}, status=403)
+
+    # Parse request data
     if request.content_type == "application/json":
         try:
             data = json.loads(request.body)
@@ -134,20 +144,19 @@ def evaluate_chunk(request, chunk_id):
     else:
         data = request.POST
 
-    # Convert values to booleans (assuming values are strings in JSON)
+    # Convert string values to booleans
     single_speaker = str(data.get("single_speaker", "false")).lower() == "true"
     speaker_overlap = str(data.get("speaker_overlap", "false")).lower() == "true"
     background_noise = str(data.get("background_noise", "false")).lower() == "true"
     prolonged_silence = str(data.get("prolonged_silence", "false")).lower() == "true"
     not_speech_rate = str(data.get("not_speech_rate", "false")).lower() == "true"
     echo_noise = str(data.get("echo_noise", "false")).lower() == "true"
-    # is_evaluated = str(data.get('is_evaluated', 'false')).lower() == 'true'
     evaluation_notes = data.get("evaluation_notes", "")
 
+    # ✅ Ensure `user` is assigned properly
     evaluation, created = evaluation_results.objects.update_or_create(
         audiofilechunk=chunk,
         is_evaluated_by=user,
-        is_evaluated=True,
         defaults={
             "single_speaker": single_speaker,
             "speaker_overlap": speaker_overlap,
@@ -155,19 +164,17 @@ def evaluate_chunk(request, chunk_id):
             "prolonged_silence": prolonged_silence,
             "not_speech_rate": not_speech_rate,
             "echo_noise": echo_noise,
-            # 'is_evaluated': is_evaluated,
             "evaluation_notes": evaluation_notes,
             "evaluation_date": now(),
+            "created_by": user,   # ✅ Ensuring this is a User instance
+            "updated_by": user,   # ✅ Ensuring this is a User instance
         },
     )
 
-    # To be removed when checking for score by users
+    # ✅ Update chunk status
     chunk.is_evaluated = True
+    chunk.evaluation_count += 1
     chunk.save()
-
-    if created:
-        chunk.evaluation_count += 1  # ✅ Increment evaluation count
-        chunk.save()
 
     return JsonResponse(
         {
@@ -176,7 +183,6 @@ def evaluate_chunk(request, chunk_id):
             "created": created,
         }
     )
-
 
 @csrf_exempt
 def chunk_statistics(request):
