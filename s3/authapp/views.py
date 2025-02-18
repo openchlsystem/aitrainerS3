@@ -131,9 +131,9 @@ class RegisterUserView(APIView):
     def post(self, request):
         whatsapp_number = request.data.get("whatsapp_number")
         name = request.data.get("name")
-        # password = request.data.get("password")
+        password = request.data.get("password")
 
-        if not whatsapp_number:
+        if not whatsapp_number or not password:
             return Response({"error": "WhatsApp number and password are required."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check if user exists
@@ -141,7 +141,7 @@ class RegisterUserView(APIView):
             return Response({"error": "User already exists."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Create a new user
-        user = User.objects.create_user(username=whatsapp_number, first_name=name)
+        user = User.objects.create_user(username=whatsapp_number, password=password, first_name=name)
         return Response({"message": "User registered successfully!"}, status=status.HTTP_201_CREATED)
 
 class RefreshAccessTokenView(APIView):
