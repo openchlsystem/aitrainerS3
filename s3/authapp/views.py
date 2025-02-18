@@ -16,56 +16,70 @@ import time
 
 User = get_user_model()
 otp_store = {}  # Temporary store for OTPsotp_store = {}  # Temporary OTP storage
-@permission_classes([AllowAny])
 
+
+@permission_classes([AllowAny])
 class RequestOTPView(APIView):
     def post(self, request):
         whatsapp_number = request.data.get("whatsapp_number")
         org_id = 1  # Assuming org_id is provided in request
 
         if not whatsapp_number:
-            return Response({"error": "WhatsApp number is required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "WhatsApp number is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         try:
             user = User.objects.get(whatsapp_number=whatsapp_number)
         except ObjectDoesNotExist:
             return Response(
-                {"error": "User not found. Please register first."}, 
-                status=status.HTTP_404_NOT_FOUND
+                {"error": "User not found. Please register first."},
+                status=status.HTTP_404_NOT_FOUND,
             )
 
         # Send message to webhook before OTP
         webhook_url = "https://backend.bitz-itc.com/api/whatsapp/webhook/"
         webhook_payload = {
             "object": "whatsapp_business_account",
-            "entry": [{
-                "id": "101592599705197",
-                "changes": [{
-                    "value": {
-                        "messaging_product": "whatsapp",
-                        "metadata": {
-                            "phone_number_id": "555567910973933"
-                        },
-                        "contacts": [{
-                            "profile": {"name": user.first_name or "WhatsApp User"},
-                            "wa_id": whatsapp_number
-                        }],
-                        "messages": [{
-                            "from": whatsapp_number,
-                            "id": f"wamid.{random.randint(100000, 999999)}",
-                            "timestamp": str(int(time.time())),
-                            "text": {"body": "I am requesting for an OTP"},
-                            "type": "text"
-                        }]
-                    },
-                    "field": "messages"
-                }]
-            }]
+            "entry": [
+                {
+                    "id": "101592599705197",
+                    "changes": [
+                        {
+                            "value": {
+                                "messaging_product": "whatsapp",
+                                "metadata": {"phone_number_id": "555567910973933"},
+                                "contacts": [
+                                    {
+                                        "profile": {
+                                            "name": user.first_name or "WhatsApp User"
+                                        },
+                                        "wa_id": whatsapp_number,
+                                    }
+                                ],
+                                "messages": [
+                                    {
+                                        "from": whatsapp_number,
+                                        "id": f"wamid.{random.randint(100000, 999999)}",
+                                        "timestamp": str(int(time.time())),
+                                        "text": {"body": "I am requesting for an OTP"},
+                                        "type": "text",
+                                    }
+                                ],
+                            },
+                            "field": "messages",
+                        }
+                    ],
+                }
+            ],
         }
 
         try:
             webhook_response = requests.post(
-                webhook_url, json=webhook_payload, headers={"Content-Type": "application/json"}
+                webhook_url,
+                json=webhook_payload,
+                headers={"Content-Type": "application/json"},
             )
             if webhook_response.status_code != 200:
                 logging.error(f"Failed to notify webhook: {webhook_response.text}")
@@ -92,7 +106,9 @@ class RequestOTPView(APIView):
             )
 
             if response.status_code == 200:
-                return Response({"message": "OTP sent successfully!"}, status=status.HTTP_200_OK)
+                return Response(
+                    {"message": "OTP sent successfully!"}, status=status.HTTP_200_OK
+                )
             else:
                 logging.error(f"Failed to send OTP: {response.text}")
                 return Response(
@@ -126,16 +142,15 @@ class VerifyOTPView(APIView):
             # Remove OTP after successful login
             del otp_store[whatsapp_number]
 
-            return Response({
-                "access": access_token,
-                "refresh": str(refresh)
-            }, status=status.HTTP_200_OK)
+            return Response(
+                {"access": access_token, "refresh": str(refresh)},
+                status=status.HTTP_200_OK,
+            )
 
         return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
 
 @permission_classes([AllowAny])
-
 class RegisterUserView(APIView):
     def post(self, request):
         whatsapp_number = request.data.get("whatsapp_number")
@@ -143,26 +158,41 @@ class RegisterUserView(APIView):
         password = request.data.get("password")
 
         if not whatsapp_number or not password:
-            return Response({"error": "WhatsApp number and password are required."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "WhatsApp number and password are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         # Check if user exists
         if User.objects.filter(whatsapp_number=whatsapp_number).exists():
             return Response({"error": "User already exists."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Create a new user
-        user = User.objects.create_user(whatsapp_number=whatsapp_number, password=password, first_name=name)
-        return Response({"message": "User registered successfully!"}, status=status.HTTP_201_CREATED)
+        user = User.objects.create_user(
+            whatsapp_number=whatsapp_number,
+            password=password,
+            first_name=name,
+        )
+        return Response(
+            {"message": "User registered successfully!"}, status=status.HTTP_201_CREATED
+        )
+
 
 class RefreshAccessTokenView(APIView):
     def post(self, request):
         refresh_token = request.data.get("refresh")
-        
+
         if not refresh_token:
-            return Response({"error": "Refresh token is required."}, status=status.HTTP_400_BAD_REQUEST)
-        
+            return Response(
+                {"error": "Refresh token is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         try:
             refresh = RefreshToken(refresh_token)
             access_token = str(refresh.access_token)
             return Response({"access": access_token}, status=status.HTTP_200_OK)
         except Exception as e:
-            return Response({"error": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {"error": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST
+            )
