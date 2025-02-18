@@ -1,55 +1,18 @@
-from django.shortcuts import render
-
-# Create your views here.
-import pyotp
-import json
 from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework_simplejwt.tokens import RefreshToken
-
-User = get_user_model()
-
-import random
-
-# Simulated OTP storage
-otp_store = {}
-
-from django.core.exceptions import ObjectDoesNotExist
-from django.contrib.auth import get_user_model
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-import random
-import logging
-
-
-
-User = get_user_model()
-otp_store = {}  # Temporary store for OTPs
-
-import requests
-import random
-import logging
-from django.core.exceptions import ObjectDoesNotExist
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
 from django.contrib.auth.models import User
-
-otp_store = {}
-
+from django.core.exceptions import ObjectDoesNotExist
 import random
 import requests
 import logging
-from django.core.exceptions import ObjectDoesNotExist
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.contrib.auth.models import User
 import time
 
+User = get_user_model()
+
+# Simulated OTP storage
 otp_store = {}  # Temporary OTP storage
 
 class RequestOTPView(APIView):
@@ -141,8 +104,6 @@ class RequestOTPView(APIView):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-from rest_framework_simplejwt.tokens import RefreshToken
-
 class VerifyOTPView(APIView):
     def post(self, request):
         whatsapp_number = request.data.get("whatsapp_number")
@@ -166,13 +127,6 @@ class VerifyOTPView(APIView):
 
         return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
-
-from django.contrib.auth.models import User
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.core.exceptions import ObjectDoesNotExist
-
 class RegisterUserView(APIView):
     def post(self, request):
         whatsapp_number = request.data.get("whatsapp_number")
@@ -189,3 +143,17 @@ class RegisterUserView(APIView):
         # Create a new user
         user = User.objects.create_user(username=whatsapp_number, first_name=name)
         return Response({"message": "User registered successfully!"}, status=status.HTTP_201_CREATED)
+
+class RefreshAccessTokenView(APIView):
+    def post(self, request):
+        refresh_token = request.data.get("refresh")
+        
+        if not refresh_token:
+            return Response({"error": "Refresh token is required."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            refresh = RefreshToken(refresh_token)
+            access_token = str(refresh.access_token)
+            return Response({"access": access_token}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({"error": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST)
