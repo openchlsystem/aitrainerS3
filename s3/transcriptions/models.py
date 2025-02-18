@@ -5,7 +5,7 @@ import uuid
 from django.conf import settings
 
 class BaseModel(models.Model):
-    unique_id = models.UUIDField(default=uuid.uuid4, editable=False, unique=True)
+    unique_id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False, unique=True)
     created_by = models.ForeignKey(
         settings.AUTH_USER_MODEL,  # Correctly reference the user model
         related_name="created_%(class)s",
@@ -147,19 +147,18 @@ class evaluation_results(BaseModel):
     audiofilechunk = models.ForeignKey(
         AudioFileChunk, on_delete=models.CASCADE, related_name="evaluation_results"
     )
-    single_speaker = models.BooleanField(default=False)
+    dual_speaker = models.BooleanField(default=False)
     speaker_overlap = models.BooleanField(default=False)
     background_noise = models.BooleanField(default=False)
     prolonged_silence = models.BooleanField(default=False)
-    # background_noise_level = models.FloatField(null=False)
-    not_speech_rate = models.BooleanField(default=False)
+    not_normal_speech_rate = models.BooleanField(default=False)
     echo_noise = models.BooleanField(default=False)
-    is_evaluated = models.BooleanField(default=False)
-    is_evaluated_by = models.CharField(max_length=50, null=True)
-    # is_evaluated_by = models.ForeignKey(User, on_delete=models.CASCADE, related_name="evaluations")
-    evaluation_date = models.DateTimeField(null=True)
+    incomplete_sentence = models.BooleanField(default=False)
+    evaluation_start = models.DateTimeField(null=True)
+    evaluation_end = models.DateTimeField(null=True)
+    evaluation_duration = models.TimeField(null=True)
     evaluation_notes = models.TextField(null=True)
 
     class Meta:
-        unique_together = ('audiofilechunk', 'is_evaluated_by')
+        unique_together = ('audiofilechunk', 'created_by')
 

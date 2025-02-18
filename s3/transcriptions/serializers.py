@@ -50,3 +50,5 @@ class EvaluationResultsSerializer(serializers.ModelSerializer):
     class Meta:
         model = evaluation_results
         fields = '__all__'
+        read_only_fields = ['created_by', 'updated_by', 'evaluation_date'] #read only fields.
+

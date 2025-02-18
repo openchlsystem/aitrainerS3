@@ -38,15 +38,15 @@ class AudioFileDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 # ✅ EvaluatedAudioFile Views
-class CleanedAudioFileListCreateView(generics.ListCreateAPIView):
-    queryset = cleaned_audio_file.objects.all()
-    serializer_class = CleanedAudioFileSerializer
-    # permission_classes = [permissevaluated-audioions.IsAuthenticated]
+# class CleanedAudioFileListCreateView(generics.ListCreateAPIView):
+#     queryset = cleaned_audio_file.objects.all()
+#     serializer_class = CleanedAudioFileSerializer
+#     # permission_classes = [permissevaluated-audioions.IsAuthenticated]
 
 
-class CleanedAudioFileDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = cleaned_audio_file.objects.all()
-    serializer_class = CleanedAudioFileSerializer
+# class CleanedAudioFileDetailView(generics.RetrieveUpdateDestroyAPIView):
+#     queryset = cleaned_audio_file.objects.all()
+#     serializer_class = CleanedAudioFileSerializer
     # permission_classes = [permissions.IsAuthenticated]
 
 
@@ -76,17 +76,17 @@ class EvaluationRecordDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
 
-# ✅ AudioFileChunk Views
-class AudioFileChunkListCreateView(generics.ListCreateAPIView):
-    queryset = AudioFileChunk.objects.all()
-    serializer_class = AudioFileChunkSerializer
-    # permission_classes = [permissions.IsAuthenticated]
+# # ✅ AudioFileChunk Views
+# class AudioFileChunkListCreateView(generics.ListCreateAPIView):
+#     queryset = AudioFileChunk.objects.all()
+#     serializer_class = AudioFileChunkSerializer
+#     # permission_classes = [permissions.IsAuthenticated]
 
 
-class AudioFileChunkDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = AudioFileChunk.objects.all()
-    serializer_class = AudioFileChunkSerializer
-    permission_classes = [permissions.IsAuthenticated]
+# class AudioFileChunkDetailView(generics.RetrieveUpdateDestroyAPIView):
+#     queryset = AudioFileChunk.objects.all()
+#     serializer_class = AudioFileChunkSerializer
+#     permission_classes = [permissions.IsAuthenticated]
 
 
 # ✅ EvaluationResults Views
@@ -101,133 +101,152 @@ class EvaluationResultsDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = EvaluationResultsSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-class CleanedAudioFileViewSet(viewsets.ModelViewSet):
+# CleanedAudioFile Views
+class CleanedAudioFileListCreateView(generics.ListCreateAPIView):
+    queryset = cleaned_audio_file.objects.all()
     serializer_class = CleanedAudioFileSerializer
     permission_classes = [permissions.IsAuthenticated]
-    
 
     def get_queryset(self):
-            """
-            Override the default queryset to:
-            - Return all audio files.
-            - Return filtered records where `is_approved == False` and `is_disapproved == False` when `pending` query param is set to `true`.
-            """
-            queryset = cleaned_audio_file.objects.all()
-            
-            # Apply filter only if 'pending=true' is passed in query parameters
-            pending_filter = self.request.query_params.get('pending', None)
-            if pending_filter == 'true':
-                queryset = queryset.filter(is_approved=False, is_disapproved=False)
-            
-            return queryset
+        queryset = super().get_queryset()  # Start with the default queryset
 
-    @action(detail=True, methods=["patch"])
-    def toggle_approved(self, request, pk=None):
+        pending_filter = self.request.query_params.get('pending', None)
+        if pending_filter == 'true':
+            queryset = queryset.filter(is_approved=False, is_disapproved=False)
+
+        return queryset
+
+    def perform_create(self, serializer): #add user when creating
+        serializer.save(created_by=self.request.user, updated_by=self.request.user)
+
+class CleanedAudioFileDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = cleaned_audio_file.objects.all()
+    serializer_class = CleanedAudioFileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def perform_update(self, serializer): #add user when updating
+        serializer.save(updated_by=self.request.user)
+
+class CleanedAudioFileToggleApprovedView(generics.UpdateAPIView): #for toggle approve
+    queryset = cleaned_audio_file.objects.all()
+    serializer_class = CleanedAudioFileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['patch']
+
+    def patch(self, request, *args, **kwargs):
         cleaned_audio = self.get_object()
         cleaned_audio.is_approved = not cleaned_audio.is_approved
+        cleaned_audio.updated_by = request.user
         cleaned_audio.save()
         return Response(
-            {"status": "updated", "is_approved": cleaned_audio.is_approved}
+            {"status": "updated", "is_approved": cleaned_audio.is_approved}, status=status.HTTP_200_OK
         )
-    
-    @action(detail=True, methods=["patch"])
-    def toggle_disapproved(self, request, pk=None):
+
+class CleanedAudioFileToggleDisapprovedView(generics.UpdateAPIView): #for toggle disapprove
+    queryset = cleaned_audio_file.objects.all()
+    serializer_class = CleanedAudioFileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['patch']
+
+    def patch(self, request, *args, **kwargs):
         cleaned_audio = self.get_object()
         cleaned_audio.is_disapproved = not cleaned_audio.is_disapproved
+        cleaned_audio.updated_by = request.user
         cleaned_audio.save()
         return Response(
-            {"status": "updated", "is_disapproved": cleaned_audio.is_disapproved}
+            {"status": "updated", "is_disapproved": cleaned_audio.is_disapproved}, status=status.HTTP_200_OK
         )
 
 
-from django.contrib.auth.models import User
-from django.utils.timezone import now
-from django.http import JsonResponse
-from django.shortcuts import get_object_or_404
-import json
+# AudioFileChunk Views
+class AudioFileChunkListCreateView(generics.ListCreateAPIView):
+    queryset = AudioFileChunk.objects.all()
+    serializer_class = AudioFileChunkSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
-@csrf_exempt
+class AudioFileChunkDetailView(generics.RetrieveUpdateDestroyAPIView):
+    queryset = AudioFileChunk.objects.all()
+    serializer_class = AudioFileChunkSerializer
+    permission_classes = [permissions.IsAuthenticated]
 
+class AudioFileChunkEvaluateView(generics.GenericAPIView): #for evaluate
+    queryset = AudioFileChunk.objects.all()
+    serializer_class = EvaluationResultsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['post']
 
-def evaluate_chunk(request, chunk_id):
-    if request.method != "POST":
-        return JsonResponse({"error": "Method not allowed"}, status=405)
+    def post(self, request, *args, **kwargs):
+        chunk = self.get_object()
+        user = request.user
+        data = request.data
 
-    chunk = get_object_or_404(AudioFileChunk, id=chunk_id)
-    user = request.user  # ✅ Ensure user is authenticated
+        dual_speaker = str(data.get("dual_speaker", "false")).lower() == "true"
+        speaker_overlap = str(data.get("speaker_overlap", "false")).lower() == "true"
+        background_noise = str(data.get("background_noise", "false")).lower() == "true"
+        prolonged_silence = str(data.get("prolonged_silence", "false")).lower() == "true"
+        not_normal_speech_rate = str(data.get("not_normal_speech_rate", "false")).lower() == "true"
+        echo_noise = str(data.get("echo_noise", "false")).lower() == "true"
+        incomplete_sentence = str(data.get("incomplete_sentence", "false")).lower() == "true"
+        evaluation_notes = data.get("evaluation_notes", "")
+        evaluation_start = data.get("evaluation_start")
+        evaluation_end = data.get("evaluation_end")
+        evaluation_duration = data.get("evaluation_duration")
 
-    if not user.is_authenticated:
-        return JsonResponse({"error": "User must be logged in"}, status=403)
+        evaluation, created = evaluation_results.objects.update_or_create(
+            audiofilechunk=chunk,
+            created_by=user,
+            defaults={
+                "dual_speaker": dual_speaker,
+                "speaker_overlap": speaker_overlap,
+                "background_noise": background_noise,
+                "prolonged_silence": prolonged_silence,
+                "not_normal_speech_rate": not_normal_speech_rate,
+                "echo_noise": echo_noise,
+                "incomplete_sentence": incomplete_sentence,
+                "evaluation_notes": evaluation_notes,
+                "evaluation_start": evaluation_start,
+                "evaluation_end": evaluation_end,
+                "evaluation_duration": evaluation_duration,
+                "updated_by": user,
+            },
+        )
 
-    # Parse request data
-    if request.content_type == "application/json":
-        try:
-            data = json.loads(request.body)
-        except json.JSONDecodeError:
-            return JsonResponse({"error": "Invalid JSON"}, status=400)
-    else:
-        data = request.POST
+        if created:
+            evaluation.created_by = user
+        evaluation.updated_by = user
+        evaluation.save()
 
-    # Convert string values to booleans
-    single_speaker = str(data.get("single_speaker", "false")).lower() == "true"
-    speaker_overlap = str(data.get("speaker_overlap", "false")).lower() == "true"
-    background_noise = str(data.get("background_noise", "false")).lower() == "true"
-    prolonged_silence = str(data.get("prolonged_silence", "false")).lower() == "true"
-    not_speech_rate = str(data.get("not_speech_rate", "false")).lower() == "true"
-    echo_noise = str(data.get("echo_noise", "false")).lower() == "true"
-    evaluation_notes = data.get("evaluation_notes", "")
+        chunk.is_evaluated = True #to be removed when counting to 3
+        chunk.evaluation_count += 1
+        chunk.save()
 
-    # ✅ Ensure `user` is assigned properly
-    evaluation, created = evaluation_results.objects.update_or_create(
-        audiofilechunk=chunk,
-        is_evaluated_by=user,
-        defaults={
-            "single_speaker": single_speaker,
-            "speaker_overlap": speaker_overlap,
-            "background_noise": background_noise,
-            "prolonged_silence": prolonged_silence,
-            "not_speech_rate": not_speech_rate,
-            "echo_noise": echo_noise,
-            "evaluation_notes": evaluation_notes,
-            "evaluation_date": now(),
-            "created_by": user,   # ✅ Ensuring this is a User instance
-            "updated_by": user,   # ✅ Ensuring this is a User instance
-        },
-    )
+        serializer = EvaluationResultsSerializer(evaluation)
 
-    # ✅ Update chunk status
-    chunk.is_evaluated = True
-    chunk.evaluation_count += 1
-    chunk.save()
+        return Response(
+            {
+                "message": "Evaluation saved successfully",
+                "evaluation": serializer.data,
+                "created": created,
+            },
+            status=status.HTTP_200_OK,
+        )
 
-    return JsonResponse(
-        {
-            "message": "Evaluation saved successfully",
-            "evaluation_id": evaluation.id,
-            "created": created,
+class AudioFileChunkStatisticsView(generics.GenericAPIView): #for statistics
+    queryset = AudioFileChunk.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get']
+
+    def get(self, request, *args, **kwargs):
+        total_chunks = AudioFileChunk.objects.count()
+        total_evaluated_chunks = AudioFileChunk.objects.filter(is_evaluated=True).count()
+        total_unevaluated_chunks = total_chunks - total_evaluated_chunks
+
+        statistics = {
+            "total_chunks": total_chunks,
+            "total_evaluated_chunks": total_evaluated_chunks,
+            "total_unevaluated_chunks": total_unevaluated_chunks,
         }
-    )
-
-@csrf_exempt
-def chunk_statistics(request):
-    if request.method != "GET":
-        return JsonResponse({"error": "Method not allowed"}, status=405)
-
-    # Total number of chunks
-    total_chunks = AudioFileChunk.objects.count()
-
-    # Total number of evaluated chunks
-    total_evaluated_chunks = AudioFileChunk.objects.filter(is_evaluated=True).count()
-    total_unevaluated_chunks = total_chunks - total_evaluated_chunks
-
-    # Return the statistics as JSON
-    statistics = {
-        "total_chunks": total_chunks,
-        "total_evaluated_chunks": total_evaluated_chunks,
-        "total_unevaluated_chunks": total_unevaluated_chunks,
-    }
-    return JsonResponse(statistics)
-
+        return Response(statistics, status=status.HTTP_200_OK)
 
 # Batch audio file input 
 
