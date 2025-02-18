@@ -2,58 +2,20 @@ from django.shortcuts import render
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import AllowAny
 from rest_framework.decorators import api_view, permission_classes
-
-# Create your views here.
 import pyotp
 import json
 from django.contrib.auth import get_user_model
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework_simplejwt.tokens import RefreshToken
-
-User = get_user_model()
-
-import random
-
-# Simulated OTP storage
-otp_store = {}
-
 from django.core.exceptions import ObjectDoesNotExist
-from django.contrib.auth import get_user_model
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-import random
-import logging
-
-
-
-User = get_user_model()
-otp_store = {}  # Temporary store for OTPs
-
 import requests
 import random
 import logging
-from django.core.exceptions import ObjectDoesNotExist
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.contrib.auth.models import User
-
-otp_store = {}
-
-import random
-import requests
-import logging
-from django.core.exceptions import ObjectDoesNotExist
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.contrib.auth.models import User
 import time
 
-otp_store = {}  # Temporary OTP storage
+User = get_user_model()
+otp_store = {}  # Temporary store for OTPsotp_store = {}  # Temporary OTP storage
 @permission_classes([AllowAny])
 
 class RequestOTPView(APIView):
@@ -65,7 +27,7 @@ class RequestOTPView(APIView):
             return Response({"error": "WhatsApp number is required."}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            user = User.objects.get(username=whatsapp_number)
+            user = User.objects.get(whatsapp_number=whatsapp_number)
         except ObjectDoesNotExist:
             return Response(
                 {"error": "User not found. Please register first."}, 
@@ -85,7 +47,7 @@ class RequestOTPView(APIView):
                             "phone_number_id": "555567910973933"
                         },
                         "contacts": [{
-                            "profile": {"name": user.get_full_name() or "WhatsApp User"},
+                            "profile": {"name": user.first_name or "WhatsApp User"},
                             "wa_id": whatsapp_number
                         }],
                         "messages": [{
@@ -155,7 +117,7 @@ class VerifyOTPView(APIView):
 
         # Check if OTP is correct
         if otp_store.get(whatsapp_number) == otp:
-            user = User.objects.get(username=whatsapp_number)
+            user = User.objects.get(whatsapp_number=whatsapp_number)
 
             # Generate JWT tokens
             refresh = RefreshToken.for_user(user)
@@ -171,11 +133,6 @@ class VerifyOTPView(APIView):
 
         return Response({"error": "Invalid OTP"}, status=status.HTTP_400_BAD_REQUEST)
 
-from django.contrib.auth.models import User
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from django.core.exceptions import ObjectDoesNotExist
 
 @permission_classes([AllowAny])
 
@@ -189,9 +146,9 @@ class RegisterUserView(APIView):
             return Response({"error": "WhatsApp number and password are required."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Check if user exists
-        if User.objects.filter(username=whatsapp_number).exists():
+        if User.objects.filter(whatsapp_number=whatsapp_number).exists():
             return Response({"error": "User already exists."}, status=status.HTTP_400_BAD_REQUEST)
 
         # Create a new user
-        user = User.objects.create_user(username=whatsapp_number, password=password, first_name=name)
+        user = User.objects.create_user(whatsapp_number=whatsapp_number, password=password, first_name=name)
         return Response({"message": "User registered successfully!"}, status=status.HTTP_201_CREATED)

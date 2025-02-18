@@ -187,3 +187,5 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES": ("Bearer",),  # Ensure Django expects 'Bearer' tokens
 }
+
+AUTH_USER_MODEL = 'authapp.User'
