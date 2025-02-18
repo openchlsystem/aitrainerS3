@@ -105,6 +105,8 @@ class EvaluationResultsDetailView(generics.RetrieveUpdateDestroyAPIView):
 class CleanedAudioFileViewSet(viewsets.ModelViewSet):
     queryset = cleaned_audio_file.objects.all()
     serializer_class = CleanedAudioFileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
 
     @action(detail=True, methods=["patch"])
     def toggle_evaluated(self, request, pk=None):
