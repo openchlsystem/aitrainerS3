@@ -1,10 +1,10 @@
 from django.urls import path
 from .views import (
-    AudioFileChunkDetailView, AudioFileChunkEvaluateView, AudioFileChunkListCreateView, AudioFileChunkStatisticsView, AudioFileListCreateView, AudioFileDetailView,
+    AudioFileChunkDetailView, AudioFileChunkEvaluateView, AudioFileChunkListCreateView, AudioFileListCreateView, AudioFileDetailView, ChunkStatisticsSerializerView, ChunksForTranscriptionView,
     CleanedAudioFileListCreateView, CleanedAudioFileDetailView,
-    CaseRecordListCreateView, CaseRecordDetailView, CleanedAudioFileToggleApprovedView, CleanedAudioFileToggleDisapprovedView,
+    CaseRecordListCreateView, CaseRecordDetailView, CleanedAudioFileToggleApprovedView, CleanedAudioFileToggleDisapprovedView, EvaluationCategoryStatisticsView, EvaluationChunkCategoryView,
     EvaluationRecordListCreateView, EvaluationRecordDetailView,
-    EvaluationResultsListCreateView, EvaluationResultsDetailView, process_audio_folder
+    EvaluationResultsListCreateView, EvaluationResultsDetailView, EvaluationResultsSummaryView, process_audio_folder
 )
 
 urlpatterns = [
@@ -33,11 +33,22 @@ urlpatterns = [
     path('audio-chunks/<uuid:pk>/', AudioFileChunkDetailView.as_view(), name='audiofilechunk-detail'),
     # Custom Action (evaluate)
     path('audio-chunks/<uuid:pk>/evaluate/', AudioFileChunkEvaluateView.as_view(), name='audiofilechunk-evaluate'),
-    path('chunk-statistics/', AudioFileChunkStatisticsView.as_view(), name='chunk-statistics'),
+
+    #statistics
+    path('chunk-statistics/', ChunkStatisticsSerializerView.as_view(), name='chunk-statistics'),
+    path('evaluation-statistics/', EvaluationCategoryStatisticsView.as_view(), name='evaluation-statistics'),
 
     # ✅ EvaluationResults URLs
     path('evaluation-results/', EvaluationResultsListCreateView.as_view(), name='evaluationresults-list'),
     path('evaluation-results/<uuid:pk>/', EvaluationResultsDetailView.as_view(), name='evaluationresults-detail'),
+
+    #Evaluation Scores
+    path('evaluation-summary/', EvaluationResultsSummaryView.as_view(), name='evaluation-summary'),
+    #Lists the audio chunks in the 3 categories: not_evaluated, one_evaluation, two_evaluations
+    path('evaluation-categories/', EvaluationChunkCategoryView.as_view(), name='evaluation-categories'),
+
+    #chunks for transcription
+    path('transcribable/', ChunksForTranscriptionView.as_view(), name='transcribable'),
 
 
    
@@ -45,5 +56,6 @@ urlpatterns = [
     
     # Bulk Audio file processing 
     path("process-audio/", process_audio_folder, name="process_audio"),
+
 
 ]
