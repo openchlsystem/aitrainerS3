@@ -52,3 +52,22 @@ class EvaluationResultsSerializer(serializers.ModelSerializer):
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'evaluation_date'] #read only fields.
 
+
+
+from django.db.models import Count
+
+from rest_framework import serializers
+from .models import evaluation_results  # Adjust based on your actual import
+
+class EvaluationResultsSummarySerializer(serializers.Serializer):
+    created_by_username = serializers.CharField(source='created_by__whatsapp_number')
+    evaluations_done = serializers.IntegerField()
+
+    @staticmethod
+    def get_leaderboard():
+        # Aggregate the number of evaluations done by each user (grouped by 'created_by')
+        result = evaluation_results.objects.select_related('created_by').values('created_by__whatsapp_number').annotate(evaluations_done=Count('unique_id'))
+        
+        return result
+
+
