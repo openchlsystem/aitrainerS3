@@ -1,5 +1,5 @@
 import json
-from rest_framework import generics, permissions, status
+from rest_framework import generics, permissions, viewsets, status
 from .models import (
     AudioFile,
     cleaned_audio_file,
@@ -10,24 +10,19 @@ from .models import (
 )
 from .serializers import (
     AudioFileSerializer,
-    ChunkStatisticsSerializer,
     CleanedAudioFileSerializer,
     CaseRecordSerializer,
-    EvaluationCategoryStatisticsSerializer,
-    EvaluationChunkCategorySerializer,
     EvaluationRecordSerializer,
     AudioFileChunkSerializer,
     EvaluationResultsSerializer,
-    EvaluationResultsLeaderBoardSerializer,
-    EvaluationResultsSummarySerializer,
 )
+from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
 from django.http import JsonResponse
+from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 
-from django.db.models import Subquery, OuterRef, Count, FloatField, ExpressionWrapper, IntegerField, Sum
-
-from rest_framework.views import APIView
 
 # ✅ AudioFile Views
 class AudioFileListCreateView(generics.ListCreateAPIView):
@@ -98,7 +93,7 @@ class EvaluationRecordDetailView(generics.RetrieveUpdateDestroyAPIView):
 class EvaluationResultsListCreateView(generics.ListCreateAPIView):
     queryset = evaluation_results.objects.all()
     serializer_class = EvaluationResultsSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    # permission_classes = [permissions.IsAuthenticated]
 
 
 class EvaluationResultsDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -221,9 +216,9 @@ class AudioFileChunkEvaluateView(generics.GenericAPIView): #for evaluate
         evaluation.updated_by = user
         evaluation.save()
 
-        # chunk.is_evaluated = True #to be removed when counting to 3
-        # chunk.evaluation_count += 1
-        # chunk.save()
+        chunk.is_evaluated = True #to be removed when counting to 3
+        chunk.evaluation_count += 1
+        chunk.save()
 
         serializer = EvaluationResultsSerializer(evaluation)
 
@@ -236,22 +231,22 @@ class AudioFileChunkEvaluateView(generics.GenericAPIView): #for evaluate
             status=status.HTTP_200_OK,
         )
 
-# class AudioFileChunkStatisticsView(generics.GenericAPIView): #for statistics
-#     queryset = AudioFileChunk.objects.all()
-#     permission_classes = [permissions.IsAuthenticated]
-#     http_method_names = ['get']
+class AudioFileChunkStatisticsView(generics.GenericAPIView): #for statistics
+    queryset = AudioFileChunk.objects.all()
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ['get']
 
-#     def get(self, request, *args, **kwargs):
-#         total_chunks = AudioFileChunk.objects.count()
-#         total_evaluated_chunks = AudioFileChunk.objects.filter(is_evaluated=True).count()
-#         total_unevaluated_chunks = total_chunks - total_evaluated_chunks
+    def get(self, request, *args, **kwargs):
+        total_chunks = AudioFileChunk.objects.count()
+        total_evaluated_chunks = AudioFileChunk.objects.filter(is_evaluated=True).count()
+        total_unevaluated_chunks = total_chunks - total_evaluated_chunks
 
-#         statistics = {
-#             "total_chunks": total_chunks,
-#             "total_evaluated_chunks": total_evaluated_chunks,
-#             "total_unevaluated_chunks": total_unevaluated_chunks,
-#         }
-#         return Response(statistics, status=status.HTTP_200_OK)
+        statistics = {
+            "total_chunks": total_chunks,
+            "total_evaluated_chunks": total_evaluated_chunks,
+            "total_unevaluated_chunks": total_unevaluated_chunks,
+        }
+        return Response(statistics, status=status.HTTP_200_OK)
 
 # Batch audio file input 
 
@@ -263,6 +258,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files import File
 from .models import AudioFile
+
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 
@@ -384,180 +380,16 @@ def get_audio_metadata(filepath):
         return None, None
 
 
-#computes the scores of the evaluations for the chunks
-class EvaluationResultsSummaryView(generics.ListAPIView):
-    serializer_class = EvaluationResultsSummarySerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get_queryset(self):
-        return EvaluationResultsSummarySerializer.get_queryset()
-
-#returns list of audio chunks in 3 categories below
-class EvaluationChunkCategoryView(APIView):
-    serializer_class = EvaluationChunkCategorySerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, *args, **kwargs):
-        # Subquery to count evaluations per chunk
-        evaluation_counts = evaluation_results.objects.filter(
-            audiofilechunk=OuterRef('unique_id')
-        ).values('audiofilechunk').annotate(count=Count('unique_id')).values('count')
-
-        # Query chunks and annotate with evaluation count
-        chunks = AudioFileChunk.objects.annotate(
-            evaluation_count=Subquery(evaluation_counts, output_field=IntegerField())
-        )
-
-         # Categorize and fetch full chunk details
-        not_evaluated_chunks = chunks.filter(evaluation_count__isnull=True)
-        one_evaluation_chunks = chunks.filter(evaluation_count=1)
-        two_evaluations_chunks = chunks.filter(evaluation_count=2)
-
-        return Response({
-            "not_evaluated": AudioFileChunkSerializer(not_evaluated_chunks, many=True).data,
-            "one_evaluation": AudioFileChunkSerializer(one_evaluation_chunks, many=True).data,
-            "two_evaluations": AudioFileChunkSerializer(two_evaluations_chunks, many=True).data,
-        })
-    
-#returns the chunks suitable for transcription
-class ChunksForTranscriptionView(APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, *args, **kwargs):
-        total_choices = 7  # Number of boolean fields
-
-        # Subquery to count evaluations and calculate score
-        evaluation_summary = evaluation_results.objects.filter(
-            audiofilechunk=OuterRef('unique_id')
-        ).values('audiofilechunk').annotate(
-            evaluation_count=Count('unique_id'),
-            total_boolean_sum=Sum('dual_speaker', output_field=IntegerField()) +
-                              Sum('speaker_overlap', output_field=IntegerField()) +
-                              Sum('background_noise', output_field=IntegerField()) +
-                              Sum('prolonged_silence', output_field=IntegerField()) +
-                              Sum('not_normal_speech_rate', output_field=IntegerField()) +
-                              Sum('echo_noise', output_field=IntegerField()) +
-                              Sum('incomplete_sentence', output_field=IntegerField()),
-            score=ExpressionWrapper(
-                (Sum('dual_speaker', output_field=IntegerField()) +
-                 Sum('speaker_overlap', output_field=IntegerField()) +
-                 Sum('background_noise', output_field=IntegerField()) +
-                 Sum('prolonged_silence', output_field=IntegerField()) +
-                 Sum('not_normal_speech_rate', output_field=IntegerField()) +
-                 Sum('echo_noise', output_field=IntegerField()) +
-                 Sum('incomplete_sentence', output_field=IntegerField())
-                 ) / (Count('unique_id') * total_choices),
-                output_field=FloatField()
-            )
-        ).values('evaluation_count', 'score')
-
-        # Query chunks and annotate with evaluation count & score
-        chunks = AudioFileChunk.objects.annotate(
-            evaluation_count=Subquery(evaluation_summary.values('evaluation_count')),
-            score=Subquery(evaluation_summary.values('score'))
-        )
-
-        # Filter: Chunks with evaluation_count ≥ 3 and score < 0.5
-        chunks_for_transcription = chunks.filter(
-            evaluation_count__gte=3,
-            score__lt=0.5
-        )
-
-        return Response({
-            "chunks_for_transcription": AudioFileChunkSerializer(chunks_for_transcription, many=True).data
-        })
-
-#returns the current statistics on the evaluation progress on chunks
-class ChunkStatisticsSerializerView(APIView):
-    serializer_class = ChunkStatisticsSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, *args, **kwargs):
-        total_choices = 7  # Number of boolean fields
-
-        evaluation_summary = evaluation_results.objects.filter(
-            audiofilechunk=OuterRef('unique_id')
-        ).values('audiofilechunk').annotate(
-            evaluation_count=Count('unique_id'),
-            total_boolean_sum=Sum('dual_speaker', output_field=IntegerField()) +
-                              Sum('speaker_overlap', output_field=IntegerField()) +
-                              Sum('background_noise', output_field=IntegerField()) +
-                              Sum('prolonged_silence', output_field=IntegerField()) +
-                              Sum('not_normal_speech_rate', output_field=IntegerField()) +
-                              Sum('echo_noise', output_field=IntegerField()) +
-                              Sum('incomplete_sentence', output_field=IntegerField()),
-            score=ExpressionWrapper(
-                (Sum('dual_speaker', output_field=IntegerField()) +
-                 Sum('speaker_overlap', output_field=IntegerField()) +
-                 Sum('background_noise', output_field=IntegerField()) +
-                 Sum('prolonged_silence', output_field=IntegerField()) +
-                 Sum('not_normal_speech_rate', output_field=IntegerField()) +
-                 Sum('echo_noise', output_field=IntegerField()) +
-                 Sum('incomplete_sentence', output_field=IntegerField())
-                 ) / (Count('unique_id') * total_choices),
-                output_field=FloatField()
-            )
-        ).values('evaluation_count', 'score')
-
-        chunks = AudioFileChunk.objects.annotate(
-            evaluation_count=Subquery(evaluation_summary.values('evaluation_count')),
-            score=Subquery(evaluation_summary.values('score'))
-        )
-
-        total_chunks = chunks.count()
-        not_evaluated = chunks.filter(evaluation_count__isnull=True).count()
-        one_evaluation = chunks.filter(evaluation_count=1).count()
-        two_evaluations = chunks.filter(evaluation_count=2).count()
-        three_or_more_evaluations = chunks.filter(evaluation_count__gte=3).count()
-        ready_for_transcription = chunks.filter(evaluation_count__gte=3, score__lt=0.5).count()
-        transcribed_chunks = chunks.exclude(feature_text__isnull=True).exclude(feature_text="").count()  # New statistic
-
-        evaluation_completion_rate = ((total_chunks - not_evaluated) / total_chunks) * 100 if total_chunks > 0 else 0
-
-        stats = {
-            "total_chunks": total_chunks,
-            "not_evaluated": not_evaluated,
-            "one_evaluation": one_evaluation,
-            "two_evaluations": two_evaluations,
-            "three_or_more_evaluations": three_or_more_evaluations,
-            "ready_for_transcription": ready_for_transcription,
-            "evaluation_completion_rate": round(evaluation_completion_rate, 2),
-            "transcribed_chunks": transcribed_chunks
-        }
-
-        return Response(stats)
-
-#returns progress of the evaluation results
-class EvaluationCategoryStatisticsView(APIView):
-    serializer_class = EvaluationCategoryStatisticsSerializer
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request, *args, **kwargs):
-        total_evaluations = evaluation_results.objects.values().count()
-
-        stats = evaluation_results.objects.aggregate(
-            dual_speaker_count=Sum('dual_speaker', output_field=IntegerField()),
-            speaker_overlap_count=Sum('speaker_overlap', output_field=IntegerField()),
-            background_noise_count=Sum('background_noise', output_field=IntegerField()),
-            prolonged_silence_count=Sum('prolonged_silence', output_field=IntegerField()),
-            not_normal_speech_rate_count=Sum('not_normal_speech_rate', output_field=IntegerField()),
-            echo_noise_count=Sum('echo_noise', output_field=IntegerField()),
-            incomplete_sentence_count=Sum('incomplete_sentence', output_field=IntegerField()),
-        )
-
-        stats["total_evaluations"] = total_evaluations
-
-        return Response(stats)
 
 # leader board 
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import EvaluationResultsLeaderBoardSerializer
+from .serializers import EvaluationResultsSummarySerializer
 
 class LeaderboardView(APIView):
     def get(self, request, *args, **kwargs):
-        leaderboard_data = EvaluationResultsLeaderBoardSerializer.get_leaderboard()
-        serializer = EvaluationResultsLeaderBoardSerializer(leaderboard_data, many=True)
+        leaderboard_data = EvaluationResultsSummarySerializer.get_leaderboard()
+        serializer = EvaluationResultsSummarySerializer(leaderboard_data, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
