@@ -126,21 +126,21 @@ class AudioFileChunk(BaseModel):
         max_length=10, choices=GENDER_CHOICES, default="not_sure"
     )  # ✅ Gender field
     locale = models.CharField(
-        max_length=5, choices=LOCALE_CHOICES, default="both"
+        max_length=5, choices=LOCALE_CHOICES, default="sw"
     )  # ✅ Locale field
-    is_evaluated = models.BooleanField(
-        default=False
-    )  # ✅ Tracks whether chunk is evaluated
-    evaluation_count = models.PositiveIntegerField(default=0)
-    transcribe_chunk = models.BooleanField(default=False)
+    # is_evaluated = models.BooleanField(
+    #     default=False
+    # )  # ✅ Tracks whether chunk is evaluated
+    # # evaluation_count = models.PositiveIntegerField(default=0)
+    # transcribe_chunk = models.BooleanField(default=False)
 
-    def save(self, *args, **kwargs):
-        # Set is_evaluated to True if evaluation_count >= 3.
-        if self.evaluation_count >= 1:
-            self.is_evaluated = True
-        else:
-            self.is_evaluated = False
-        super().save(*args, **kwargs)
+    # def save(self, *args, **kwargs):
+    #     # Set is_evaluated to True if evaluation_count >= 3.
+    #     if self.evaluation_count >= 1:
+    #         self.is_evaluated = True
+    #     else:
+    #         self.is_evaluated = False
+    #     super().save(*args, **kwargs)
 
 
 class evaluation_results(BaseModel):
