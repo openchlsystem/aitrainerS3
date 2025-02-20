@@ -5,6 +5,7 @@ from .views import (
     CaseRecordListCreateView, CaseRecordDetailView, CleanedAudioFileToggleApprovedView, CleanedAudioFileToggleDisapprovedView, EvaluationCategoryStatisticsView, EvaluationChunkCategoryView,
     EvaluationRecordListCreateView, EvaluationRecordDetailView,
     EvaluationResultsListCreateView, EvaluationResultsDetailView, EvaluationResultsSummaryView, process_audio_folder
+    EvaluationResultsListCreateView, EvaluationResultsDetailView, LeaderboardView, process_audio_folder
 )
 
 urlpatterns = [
@@ -56,6 +57,11 @@ urlpatterns = [
     
     # Bulk Audio file processing 
     path("process-audio/", process_audio_folder, name="process_audio"),
+    
+    
+    # Leaderboard 
+    path('leader-board/', LeaderboardView.as_view(), name='Leader_board'),
+
 
 
 ]

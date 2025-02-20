@@ -90,26 +90,26 @@ WSGI_APPLICATION = "s3.wsgi.application"
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
-# DATABASES = {
-#     "default": {
-#         "ENGINE": "django.db.backends.sqlite3",
-#         "NAME": BASE_DIR / "db.sqlite3",
-#     }
-# }
-
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.mysql",
-        "NAME": "aitraining_data",
-        "USER":"root",
-        "HOST":"localhost",
-        "PASSWORD":"2025Ai@2025!",
-        "PORT":"",
-    #    'OPTIONS': {
-    #         'unix_socket': '/var/lib/mysql/mysql.sock',  
-    #     },
+        "ENGINE": "django.db.backends.sqlite3",
+        "NAME": BASE_DIR / "db.sqlite3",
     }
 }
+
+# DATABASES = {
+#     "default": {
+#         "ENGINE": "django.db.backends.mysql",
+#         "NAME": "aitraining_data",
+#         "USER":"root",
+#         "HOST":"localhost",
+#         "PASSWORD":"2025Ai@2025!",
+#         "PORT":"",
+#     #    'OPTIONS': {
+#     #         'unix_socket': '/var/lib/mysql/mysql.sock',  
+#     #     },
+#     }
+# }
 
 
 # diable on local 

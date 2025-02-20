@@ -547,3 +547,16 @@ class EvaluationCategoryStatisticsView(APIView):
         stats["total_evaluations"] = total_evaluations
 
         return Response(stats)
+
+# leader board 
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
+from .serializers import EvaluationResultsSummarySerializer
+
+class LeaderboardView(APIView):
+    def get(self, request, *args, **kwargs):
+        leaderboard_data = EvaluationResultsSummarySerializer.get_leaderboard()
+        serializer = EvaluationResultsSummarySerializer(leaderboard_data, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
