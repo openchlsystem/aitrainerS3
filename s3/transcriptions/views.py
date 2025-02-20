@@ -258,7 +258,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files import File
 from .models import AudioFile
-from pydub.utils import mediainfo  # Faster metadata extraction
+
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 
