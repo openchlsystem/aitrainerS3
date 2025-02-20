@@ -141,7 +141,7 @@ from django.db.models import Count
 from rest_framework import serializers
 from .models import evaluation_results  # Adjust based on your actual import
 
-class EvaluationResultsSummarySerializer(serializers.Serializer):
+class EvaluationResultsLeaderBoardSerializer(serializers.Serializer):
     created_by_username = serializers.CharField(source='created_by__whatsapp_number')
     evaluations_done = serializers.IntegerField()
 

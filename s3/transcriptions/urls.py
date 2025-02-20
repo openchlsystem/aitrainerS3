@@ -4,7 +4,7 @@ from .views import (
     CleanedAudioFileListCreateView, CleanedAudioFileDetailView,
     CaseRecordListCreateView, CaseRecordDetailView, CleanedAudioFileToggleApprovedView, CleanedAudioFileToggleDisapprovedView, EvaluationCategoryStatisticsView, EvaluationChunkCategoryView,
     EvaluationRecordListCreateView, EvaluationRecordDetailView,
-    EvaluationResultsListCreateView, EvaluationResultsDetailView, EvaluationResultsSummaryView, process_audio_folder
+    EvaluationResultsListCreateView, EvaluationResultsDetailView, EvaluationResultsSummaryView, process_audio_folder,
     EvaluationResultsListCreateView, EvaluationResultsDetailView, LeaderboardView, process_audio_folder
 )
 

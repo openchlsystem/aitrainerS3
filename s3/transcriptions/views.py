@@ -18,6 +18,7 @@ from .serializers import (
     EvaluationRecordSerializer,
     AudioFileChunkSerializer,
     EvaluationResultsSerializer,
+    EvaluationResultsLeaderBoardSerializer,
     EvaluationResultsSummarySerializer,
 )
 from rest_framework.response import Response
@@ -97,7 +98,7 @@ class EvaluationRecordDetailView(generics.RetrieveUpdateDestroyAPIView):
 class EvaluationResultsListCreateView(generics.ListCreateAPIView):
     queryset = evaluation_results.objects.all()
     serializer_class = EvaluationResultsSerializer
-    # permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
 
 
 class EvaluationResultsDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -552,11 +553,11 @@ class EvaluationCategoryStatisticsView(APIView):
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from .serializers import EvaluationResultsSummarySerializer
+from .serializers import EvaluationResultsLeaderBoardSerializer
 
 class LeaderboardView(APIView):
     def get(self, request, *args, **kwargs):
-        leaderboard_data = EvaluationResultsSummarySerializer.get_leaderboard()
-        serializer = EvaluationResultsSummarySerializer(leaderboard_data, many=True)
+        leaderboard_data = EvaluationResultsLeaderBoardSerializer.get_leaderboard()
+        serializer = EvaluationResultsLeaderBoardSerializer(leaderboard_data, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
