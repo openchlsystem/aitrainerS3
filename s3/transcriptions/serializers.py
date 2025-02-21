@@ -2,7 +2,7 @@ from rest_framework import serializers
 from .models import (
     AudioFile, cleaned_audio_file, CaseRecord, evaluation_record, AudioFileChunk, evaluation_results
 )
-from django.db.models import Count, Sum, IntegerField, F, ExpressionWrapper, FloatField
+from django.db.models import Count, Sum, IntegerField, ExpressionWrapper, FloatField
 
 
 class AudioFileSerializer(serializers.ModelSerializer):
@@ -53,10 +53,6 @@ class EvaluationResultsSerializer(serializers.ModelSerializer):
         model = evaluation_results
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'evaluation_date'] #read only fields.
-
-from django.db.models import Count, Sum, IntegerField
-from rest_framework import serializers, generics
-from .models import evaluation_results, AudioFileChunk
 
 class EvaluationResultsSummarySerializer(serializers.Serializer):
     audiofilechunk = serializers.UUIDField()
@@ -135,20 +131,14 @@ class EvaluationCategoryStatisticsSerializer(serializers.Serializer):
     incomplete_sentence_count = serializers.IntegerField()
     total_evaluated_chunks = serializers.IntegerField()
 
-
-from django.db.models import Count
-
-from rest_framework import serializers
-from .models import evaluation_results  # Adjust based on your actual import
-
 class EvaluationResultsLeaderBoardSerializer(serializers.Serializer):
-    created_by_username = serializers.CharField(source='created_by__whatsapp_number')
+    created_by_username = serializers.CharField(source='created_by__first_name')
     evaluations_done = serializers.IntegerField()
 
     @staticmethod
     def get_leaderboard():
         # Aggregate the number of evaluations done by each user (grouped by 'created_by')
-        result = evaluation_results.objects.select_related('created_by').values('created_by__whatsapp_number').annotate(evaluations_done=Count('unique_id'))
+        result = evaluation_results.objects.select_related('created_by').values('created_by__first_name').annotate(evaluations_done=Count('unique_id'))
         
         return result
 
