@@ -493,8 +493,7 @@ class EvaluationChunkCategoryView(APIView):
         two_evaluations_chunks = list(chunks.filter(evaluation_count=2).values())
 
         # Helper function to build full URL
-        def get_full_url(chunk):
-            return request.build_absolute_uri(chunk.chunk_file.url)
+        
 
         # Collect unique_ids for categorized chunks (excluding not_evaluated)
         evaluated_chunk_ids = [chunk["unique_id"] for chunk in one_evaluation_chunks + two_evaluations_chunks]
@@ -510,7 +509,8 @@ class EvaluationChunkCategoryView(APIView):
         # Append evaluated_by_user boolean to the required categories
         for chunk in one_evaluation_chunks + two_evaluations_chunks:
             chunk["evaluated_by_user"] = chunk["unique_id"] in user_evaluated_set
-
+        def get_full_url(chunk):
+            return request.build_absolute_uri(chunk.chunk_file.url)
         # Append full URL for chunk_file
         for chunk in not_evaluated_chunks:
             chunk['chunk_file'] = get_full_url(AudioFileChunk.objects.get(unique_id=chunk['unique_id']))
@@ -574,13 +574,21 @@ class ChunksForTranscriptionView(APIView):
         )
 
         # Filter: Chunks with evaluation_count ≥ 3 and score < 0.5
-        chunks_for_transcription = chunks.filter(evaluation_count__gte=3, score__lt=0.5)
+        chunks_for_transcription = chunks.filter(evaluation_count__gte=3, score__lt=0.3)
+
+        def get_full_url(chunk):
+            return request.build_absolute_uri(chunk.chunk_file.url)
+        
+        resultingChunks = AudioFileChunkSerializer(
+                    chunks_for_transcription, many=True
+                ).data
+        # Append full URL for chunk_file
+        for chunk in resultingChunks:
+            chunk['chunk_file'] = get_full_url(AudioFileChunk.objects.get(unique_id=chunk['unique_id']))
 
         return Response(
             {
-                "chunks_for_transcription": AudioFileChunkSerializer(
-                    chunks_for_transcription, many=True
-                ).data
+                "chunks_for_transcription": resultingChunks
             }
         )
 
@@ -686,14 +694,6 @@ class EvaluationCategoryStatisticsView(APIView):
         stats["total_evaluations"] = total_evaluations
 
         return Response(stats)
-
-
-# leader board
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from .serializers import EvaluationResultsLeaderBoardSerializer
-
 
 class LeaderboardView(APIView):
     def get(self, request, *args, **kwargs):
