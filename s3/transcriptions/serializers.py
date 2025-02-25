@@ -44,6 +44,7 @@ class AudioFileChunkSerializer(serializers.ModelSerializer):
     class Meta:
         model = AudioFileChunk
         fields = '__all__'
+        read_only_fields = ['chunk_file'] #read only fields.
 
 class EvaluationResultsSerializer(serializers.ModelSerializer):
     created_by = serializers.ReadOnlyField(source='created_by.whatsapp_number')  # Read-only
