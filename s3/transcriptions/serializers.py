@@ -1,6 +1,6 @@
 from rest_framework import serializers
 from .models import (
-    AudioFile, cleaned_audio_file, CaseRecord, evaluation_record, AudioFileChunk, evaluation_results
+    AudioFile, CleanedAudioFile, CaseRecord, AudioFileChunk, EvaluationResults
 )
 from django.db.models import Count, Sum, IntegerField, ExpressionWrapper, FloatField
 
@@ -18,7 +18,7 @@ class CleanedAudioFileSerializer(serializers.ModelSerializer):
     updated_by = serializers.ReadOnlyField(source='updated_by.whatsapp_number')  # Read-only
 
     class Meta:
-        model = cleaned_audio_file
+        model = CleanedAudioFile
         fields = '__all__'
 
 class CaseRecordSerializer(serializers.ModelSerializer):
@@ -29,13 +29,13 @@ class CaseRecordSerializer(serializers.ModelSerializer):
         model = CaseRecord
         fields = '__all__'
 
-class EvaluationRecordSerializer(serializers.ModelSerializer):
-    created_by = serializers.ReadOnlyField(source='created_by.whatsapp_number')  # Read-only
-    updated_by = serializers.ReadOnlyField(source='updated_by.whatsapp_number')  # Read-only
+# class EvaluationRecordSerializer(serializers.ModelSerializer):
+#     created_by = serializers.ReadOnlyField(source='created_by.whatsapp_number')  # Read-only
+#     updated_by = serializers.ReadOnlyField(source='updated_by.whatsapp_number')  # Read-only
 
-    class Meta:
-        model = evaluation_record
-        fields = '__all__'
+#     class Meta:
+#         model = EvaluationRecord
+#         fields = '__all__'
 
 class AudioFileChunkSerializer(serializers.ModelSerializer):
     created_by = serializers.ReadOnlyField(source='created_by.whatsapp_number')  # Read-only
@@ -51,7 +51,7 @@ class EvaluationResultsSerializer(serializers.ModelSerializer):
     updated_by = serializers.ReadOnlyField(source='updated_by.whatsapp_number')  # Read-only
 
     class Meta:
-        model = evaluation_results
+        model = EvaluationResults
         fields = '__all__'
         read_only_fields = ['created_by', 'updated_by', 'evaluation_date'] #read only fields.
 
@@ -71,7 +71,7 @@ class EvaluationResultsSummarySerializer(serializers.Serializer):
     @classmethod
     def get_queryset(cls):
         total_choices = 7  # Number of boolean fields
-        return evaluation_results.objects.values('audiofilechunk').annotate(
+        return EvaluationResults.objects.values('audiofilechunk').annotate(
             evaluation_count=Count('unique_id'),
             dual_speaker_count=Sum('dual_speaker', output_field=IntegerField()),
             speaker_overlap_count=Sum('speaker_overlap', output_field=IntegerField()),
@@ -139,7 +139,7 @@ class EvaluationResultsLeaderBoardSerializer(serializers.Serializer):
     @staticmethod
     def get_leaderboard():
         # Aggregate the number of evaluations done by each user (grouped by 'created_by')
-        result = evaluation_results.objects.select_related('created_by').values('created_by__first_name').annotate(evaluations_done=Count('unique_id'))
+        result = EvaluationResults.objects.select_related('created_by').values('created_by__first_name').annotate(evaluations_done=Count('unique_id'))
         
         return result
 
