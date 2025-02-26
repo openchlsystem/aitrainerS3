@@ -2,11 +2,10 @@ import json
 from rest_framework import generics, permissions, status
 from .models import (
     AudioFile,
-    cleaned_audio_file,
+    CleanedAudioFile,
     CaseRecord,
-    evaluation_record,
     AudioFileChunk,
-    evaluation_results,
+    EvaluationResults,
 )
 from .serializers import (
     AudioFileSerializer,
@@ -15,7 +14,6 @@ from .serializers import (
     CaseRecordSerializer,
     EvaluationCategoryStatisticsSerializer,
     EvaluationChunkCategorySerializer,
-    EvaluationRecordSerializer,
     AudioFileChunkSerializer,
     EvaluationResultsSerializer,
     EvaluationResultsLeaderBoardSerializer,
@@ -53,13 +51,13 @@ class AudioFileDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 # ✅ EvaluatedAudioFile Views
 # class CleanedAudioFileListCreateView(generics.ListCreateAPIView):
-#     queryset = cleaned_audio_file.objects.all()
+#     queryset = CleanedAudioFile.objects.all()
 #     serializer_class = CleanedAudioFileSerializer
 #     # permission_classes = [permissevaluated-audioions.IsAuthenticated]
 
 
 # class CleanedAudioFileDetailView(generics.RetrieveUpdateDestroyAPIView):
-#     queryset = cleaned_audio_file.objects.all()
+#     queryset = CleanedAudioFile.objects.all()
 #     serializer_class = CleanedAudioFileSerializer
 # permission_classes = [permissions.IsAuthenticated]
 
@@ -77,17 +75,17 @@ class CaseRecordDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
 
-# ✅ EvaluationRecord Views
-class EvaluationRecordListCreateView(generics.ListCreateAPIView):
-    queryset = evaluation_record.objects.all()
-    serializer_class = EvaluationRecordSerializer
-    permission_classes = [permissions.IsAuthenticated]
+# # ✅ EvaluationRecord Views
+# class EvaluationRecordListCreateView(generics.ListCreateAPIView):
+#     queryset = EvaluationRecord.objects.all()
+#     serializer_class = EvaluationRecordSerializer
+#     permission_classes = [permissions.IsAuthenticated]
 
 
-class EvaluationRecordDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = evaluation_record.objects.all()
-    serializer_class = EvaluationRecordSerializer
-    permission_classes = [permissions.IsAuthenticated]
+# class EvaluationRecordDetailView(generics.RetrieveUpdateDestroyAPIView):
+#     queryset = EvaluationRecord.objects.all()
+#     serializer_class = EvaluationRecordSerializer
+#     permission_classes = [permissions.IsAuthenticated]
 
 
 # # ✅ AudioFileChunk Views
@@ -105,20 +103,20 @@ class EvaluationRecordDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 # ✅ EvaluationResults Views
 class EvaluationResultsListCreateView(generics.ListCreateAPIView):
-    queryset = evaluation_results.objects.all()
+    queryset = EvaluationResults.objects.all()
     serializer_class = EvaluationResultsSerializer
     permission_classes = [permissions.IsAuthenticated]
 
 
 class EvaluationResultsDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = evaluation_results.objects.all()
+    queryset = EvaluationResults.objects.all()
     serializer_class = EvaluationResultsSerializer
     permission_classes = [permissions.IsAuthenticated]
 
 
 # CleanedAudioFile Views
 class CleanedAudioFileListCreateView(generics.ListCreateAPIView):
-    queryset = cleaned_audio_file.objects.all()
+    queryset = CleanedAudioFile.objects.all()
     serializer_class = CleanedAudioFileSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -136,7 +134,7 @@ class CleanedAudioFileListCreateView(generics.ListCreateAPIView):
 
 
 class CleanedAudioFileDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = cleaned_audio_file.objects.all()
+    queryset = CleanedAudioFile.objects.all()
     serializer_class = CleanedAudioFileSerializer
     permission_classes = [permissions.IsAuthenticated]
 
@@ -145,7 +143,7 @@ class CleanedAudioFileDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class CleanedAudioFileToggleApprovedView(generics.UpdateAPIView):  # for toggle approve
-    queryset = cleaned_audio_file.objects.all()
+    queryset = CleanedAudioFile.objects.all()
     serializer_class = CleanedAudioFileSerializer
     permission_classes = [permissions.IsAuthenticated]
     http_method_names = ["patch"]
@@ -164,7 +162,7 @@ class CleanedAudioFileToggleApprovedView(generics.UpdateAPIView):  # for toggle 
 class CleanedAudioFileToggleDisapprovedView(
     generics.UpdateAPIView
 ):  # for toggle disapprove
-    queryset = cleaned_audio_file.objects.all()
+    queryset = CleanedAudioFile.objects.all()
     serializer_class = CleanedAudioFileSerializer
     permission_classes = [permissions.IsAuthenticated]
     http_method_names = ["patch"]
@@ -222,7 +220,7 @@ class AudioFileChunkEvaluateView(generics.GenericAPIView):  # for evaluate
         evaluation_end = data.get("evaluation_end")
         evaluation_duration = data.get("evaluation_duration")
 
-        evaluation, created = evaluation_results.objects.update_or_create(
+        evaluation, created = EvaluationResults.objects.update_or_create(
             audiofilechunk=chunk,
             created_by=user,
             defaults={
@@ -450,7 +448,7 @@ class EvaluationResultsSummaryView(generics.ListAPIView):
 
 #     def get(self, request, *args, **kwargs):
 #         # Subquery to count evaluations per chunk
-#         evaluation_counts = evaluation_results.objects.filter(
+#         evaluation_counts = EvaluationResults.objects.filter(
 #             audiofilechunk=OuterRef('unique_id')
 #         ).values('audiofilechunk').annotate(count=Count('unique_id')).values('count')
 
@@ -478,7 +476,7 @@ class EvaluationChunkCategoryView(APIView):
         user_phone = request.user  # Assuming user is identified by WhatsApp number
 
         # Subquery to count evaluations per chunk
-        evaluation_counts = evaluation_results.objects.filter(
+        evaluation_counts = EvaluationResults.objects.filter(
             audiofilechunk=OuterRef('unique_id')
         ).values('audiofilechunk').annotate(count=Count('unique_id')).values('count')
 
@@ -499,7 +497,7 @@ class EvaluationChunkCategoryView(APIView):
         evaluated_chunk_ids = [chunk["unique_id"] for chunk in one_evaluation_chunks + two_evaluations_chunks]
 
         # Fetch evaluations done by the current user for those chunks
-        user_evaluations = evaluation_results.objects.filter(
+        user_evaluations = EvaluationResults.objects.filter(
             audiofilechunk__in=evaluated_chunk_ids, created_by=user_phone
         ).values_list("audiofilechunk", flat=True)
 
@@ -539,7 +537,7 @@ class ChunksForTranscriptionView(APIView):
 
         # Subquery to count evaluations and calculate score
         evaluation_summary = (
-            evaluation_results.objects.filter(audiofilechunk=OuterRef("unique_id"))
+            EvaluationResults.objects.filter(audiofilechunk=OuterRef("unique_id"))
             .values("audiofilechunk")
             .annotate(
                 evaluation_count=Count("unique_id"),
@@ -602,7 +600,7 @@ class ChunkStatisticsSerializerView(APIView):
         total_choices = 7  # Number of boolean fields
 
         evaluation_summary = (
-            evaluation_results.objects.filter(audiofilechunk=OuterRef("unique_id"))
+            EvaluationResults.objects.filter(audiofilechunk=OuterRef("unique_id"))
             .values("audiofilechunk")
             .annotate(
                 evaluation_count=Count("unique_id"),
@@ -673,9 +671,9 @@ class EvaluationCategoryStatisticsView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
-        total_evaluations = evaluation_results.objects.values().count()
+        total_evaluations = EvaluationResults.objects.values().count()
 
-        stats = evaluation_results.objects.aggregate(
+        stats = EvaluationResults.objects.aggregate(
             dual_speaker_count=Sum("dual_speaker", output_field=IntegerField()),
             speaker_overlap_count=Sum("speaker_overlap", output_field=IntegerField()),
             background_noise_count=Sum("background_noise", output_field=IntegerField()),

@@ -3,7 +3,6 @@ from .views import (
     AudioFileChunkDetailView, AudioFileChunkEvaluateView, AudioFileChunkListCreateView, AudioFileListCreateView, AudioFileDetailView, ChunkStatisticsSerializerView, ChunksForTranscriptionView,
     CleanedAudioFileListCreateView, CleanedAudioFileDetailView,
     CaseRecordListCreateView, CaseRecordDetailView, CleanedAudioFileToggleApprovedView, CleanedAudioFileToggleDisapprovedView, EvaluationCategoryStatisticsView, EvaluationChunkCategoryView,
-    EvaluationRecordListCreateView, EvaluationRecordDetailView,
     EvaluationResultsListCreateView, EvaluationResultsDetailView, EvaluationResultsSummaryView, process_audio_folder,
     EvaluationResultsListCreateView, EvaluationResultsDetailView, LeaderboardView, process_audio_folder
 )
@@ -26,8 +25,8 @@ urlpatterns = [
     path('case-records/<uuid:pk>/', CaseRecordDetailView.as_view(), name='caserecord-detail'),
 
     # ✅ EvaluationRecord URLs
-    path('evaluation-records/', EvaluationRecordListCreateView.as_view(), name='evaluationrecord-list'),
-    path('evaluation-records/<uuid:pk>/', EvaluationRecordDetailView.as_view(), name='evaluationrecord-detail'),
+    # path('evaluation-records/', EvaluationRecordListCreateView.as_view(), name='evaluationrecord-list'),
+    # path('evaluation-records/<uuid:pk>/', EvaluationRecordDetailView.as_view(), name='evaluationrecord-detail'),
       
     # ✅ AudioFileChunk URLs
     path('audio-chunks/', AudioFileChunkListCreateView.as_view(), name='audiofilechunk-list'),

@@ -2,10 +2,10 @@ import os
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
-from .models import cleaned_audio_file
+from .models import CleanedAudioFile
 from .utils import split_and_save_chunks
 
-@receiver(post_save, sender=cleaned_audio_file)
+@receiver(post_save, sender=CleanedAudioFile)
 def handle_cleaned_audio_file_save(sender, instance, created, **kwargs):
     """
     Signal that listens for the post_save event of the cleaned_audio_file model.
