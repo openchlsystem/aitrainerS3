@@ -4,7 +4,7 @@ import numpy as np
 import soundfile as sf
 from concurrent.futures import ThreadPoolExecutor
 from django.conf import settings
-from transcriptions.models import cleaned_audio_file, AudioFileChunk
+from transcriptions.models import CleanedAudioFile, AudioFileChunk
 
 
 def adjust_to_frame_length(chunk_length_ms, frame_length_ms):
@@ -201,6 +201,6 @@ def split_and_save_chunks(
 
 
 def process_all_cleaned_audio():
-    cleaned_audio_files = cleaned_audio_file.objects.all()
-    for audio_file in cleaned_audio_files:
+    CleanedAudioFiles = CleanedAudioFile.objects.all()
+    for audio_file in CleanedAudioFiles:
         split_and_save_chunks(audio_file)

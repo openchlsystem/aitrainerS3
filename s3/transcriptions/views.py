@@ -1,5 +1,5 @@
 import json
-from rest_framework import generics, permissions, viewsets, status
+from rest_framework import generics, permissions, status
 from .models import (
     AudioFile,
     cleaned_audio_file,
@@ -10,21 +10,21 @@ from .models import (
 )
 from .serializers import (
     AudioFileSerializer,
+    ChunkStatisticsSerializer,
     CleanedAudioFileSerializer,
     CaseRecordSerializer,
+    EvaluationCategoryStatisticsSerializer,
+    EvaluationChunkCategorySerializer,
     EvaluationRecordSerializer,
     AudioFileChunkSerializer,
     EvaluationResultsSerializer,
+    EvaluationResultsLeaderBoardSerializer,
+    EvaluationResultsSummarySerializer,
 )
-from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
 from django.http import JsonResponse
-from django.utils.timezone import now
 from django.views.decorators.csrf import csrf_exempt
 
-<<<<<<< HEAD
-=======
 from django.db.models import (
     Subquery,
     OuterRef,
@@ -36,7 +36,6 @@ from django.db.models import (
 )
 
 from rest_framework.views import APIView
->>>>>>> 9635375954a61b001e115530f152a5c38720ec9e
 
 
 # ✅ AudioFile Views
@@ -108,7 +107,7 @@ class EvaluationRecordDetailView(generics.RetrieveUpdateDestroyAPIView):
 class EvaluationResultsListCreateView(generics.ListCreateAPIView):
     queryset = evaluation_results.objects.all()
     serializer_class = EvaluationResultsSerializer
-    # permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
 
 
 class EvaluationResultsDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -247,9 +246,9 @@ class AudioFileChunkEvaluateView(generics.GenericAPIView):  # for evaluate
         evaluation.updated_by = user
         evaluation.save()
 
-        chunk.is_evaluated = True #to be removed when counting to 3
-        chunk.evaluation_count += 1
-        chunk.save()
+        # chunk.is_evaluated = True #to be removed when counting to 3
+        # chunk.evaluation_count += 1
+        # chunk.save()
 
         serializer = EvaluationResultsSerializer(evaluation)
 
@@ -262,30 +261,23 @@ class AudioFileChunkEvaluateView(generics.GenericAPIView):  # for evaluate
             status=status.HTTP_200_OK,
         )
 
-<<<<<<< HEAD
-class AudioFileChunkStatisticsView(generics.GenericAPIView): #for statistics
-    queryset = AudioFileChunk.objects.all()
-    permission_classes = [permissions.IsAuthenticated]
-    http_method_names = ['get']
-=======
 
 # class AudioFileChunkStatisticsView(generics.GenericAPIView): #for statistics
 #     queryset = AudioFileChunk.objects.all()
 #     permission_classes = [permissions.IsAuthenticated]
 #     http_method_names = ['get']
->>>>>>> 9635375954a61b001e115530f152a5c38720ec9e
 
-    def get(self, request, *args, **kwargs):
-        total_chunks = AudioFileChunk.objects.count()
-        total_evaluated_chunks = AudioFileChunk.objects.filter(is_evaluated=True).count()
-        total_unevaluated_chunks = total_chunks - total_evaluated_chunks
+#     def get(self, request, *args, **kwargs):
+#         total_chunks = AudioFileChunk.objects.count()
+#         total_evaluated_chunks = AudioFileChunk.objects.filter(is_evaluated=True).count()
+#         total_unevaluated_chunks = total_chunks - total_evaluated_chunks
 
-        statistics = {
-            "total_chunks": total_chunks,
-            "total_evaluated_chunks": total_evaluated_chunks,
-            "total_unevaluated_chunks": total_unevaluated_chunks,
-        }
-        return Response(statistics, status=status.HTTP_200_OK)
+#         statistics = {
+#             "total_chunks": total_chunks,
+#             "total_evaluated_chunks": total_evaluated_chunks,
+#             "total_unevaluated_chunks": total_unevaluated_chunks,
+#         }
+#         return Response(statistics, status=status.HTTP_200_OK)
 
 # Batch audio file input
 
@@ -297,7 +289,6 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.core.files import File
 from .models import AudioFile
-
 from django.core.files.storage import default_storage
 from django.core.files.base import ContentFile
 
@@ -441,15 +432,6 @@ def get_audio_metadata(filepath):
         return None, None
 
 
-<<<<<<< HEAD
-
-# leader board 
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework import status
-from .serializers import EvaluationResultsSummarySerializer
-
-=======
 # computes the scores of the evaluations for the chunks
 class EvaluationResultsSummaryView(generics.ListAPIView):
     serializer_class = EvaluationResultsSummarySerializer
@@ -713,9 +695,8 @@ class EvaluationCategoryStatisticsView(APIView):
 
         return Response(stats)
 
->>>>>>> 9635375954a61b001e115530f152a5c38720ec9e
 class LeaderboardView(APIView):
     def get(self, request, *args, **kwargs):
-        leaderboard_data = EvaluationResultsSummarySerializer.get_leaderboard()
-        serializer = EvaluationResultsSummarySerializer(leaderboard_data, many=True)
+        leaderboard_data = EvaluationResultsLeaderBoardSerializer.get_leaderboard()
+        serializer = EvaluationResultsLeaderBoardSerializer(leaderboard_data, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)

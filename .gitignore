@@ -48,3 +48,5 @@ s3/s3/__pycache__/
 s3/**/migrations/__pycache__/
 s3/media/
 s3/s3/settings.py
+
+aitrainerS3.code-workspace
