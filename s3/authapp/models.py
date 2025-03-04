@@ -29,6 +29,7 @@ class UserManager(BaseUserManager):
         user.is_active = (
             True  # You may also set other superuser flags like is_staff, is_superuser
         )
+        user.is_staff = True
         user.save(using=self._db)
         return user
 
@@ -38,6 +39,7 @@ class User(AbstractBaseUser):
     whatsapp_number = models.CharField(max_length=15, unique=True)
     otp_secret = models.CharField(max_length=32, default=pyotp.random_base32)
     is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False) 
     first_name = models.CharField(
         max_length=100, null=True, blank=True
     )  # Add this field for name

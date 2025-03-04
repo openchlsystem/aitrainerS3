@@ -196,3 +196,33 @@ class RefreshAccessTokenView(APIView):
             return Response(
                 {"error": "Invalid refresh token."}, status=status.HTTP_400_BAD_REQUEST
             )
+
+class StaffAuthView(APIView):
+    """Authenticate the GPU and return an access token."""
+
+    permission_classes = [AllowAny]  # Allows GPU to authenticate without a token
+
+    def post(self, request):
+        whatsapp_number = request.data.get("whatsapp_number")
+        password = request.data.get("password")
+
+        if not password:
+            return Response(
+                {"error": "Password are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            user = User.objects.get(whatsapp_number=whatsapp_number, is_staff=True)  # Ensure it's a staff user
+        except User.DoesNotExist:
+            return Response({"error": "Invalid credentials."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Authenticate the user
+        if not user.check_password(password):
+            return Response({"error": "Invalid credentials."}, status=status.HTTP_403_FORBIDDEN)
+
+        # Generate access token
+        refresh = RefreshToken.for_user(user)
+        access_token = str(refresh.access_token)
+
+        return Response({"access": access_token}, status=status.HTTP_200_OK)
