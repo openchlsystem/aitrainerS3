@@ -30,12 +30,13 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
 
-from .models import AudioFile
+from .models import AudioFile, ProcessedAudioFile
 
 # Define the preprocessing API endpoint URL
 # You should store this in your Django settings
 GPU_SERVER_BASE_URL = getattr(settings, 'GPU_SERVER_BASE_URL')
 PREPROCESSING_API_URL = f'{GPU_SERVER_BASE_URL}/audio/preprocess/'
+DIARIZING_API_URL = f'{GPU_SERVER_BASE_URL}/audio/diarize/'
 
 @receiver(post_save, sender=AudioFile)
 def trigger_audio_preprocessing(sender, instance, created, **kwargs):
@@ -88,3 +89,47 @@ def trigger_audio_preprocessing(sender, instance, created, **kwargs):
         
         except Exception as e:
             print(f"Error sending preprocessing request for audio {instance.audio_id}: {str(e)}")
+
+@receiver(post_save, sender=ProcessedAudioFile)
+def trigger_diarization(sender, instance, created, **kwargs):
+    """
+    Signal to trigger diarization when a ProcessedAudioFile is approved.
+    This signal sends a POST request to the diarization endpoint with the GPU path.
+    """
+    # Only proceed if the is_approved flag was changed to True
+    # We can detect this by checking if instance.is_approved is True and either:
+    # 1. This is a new instance (created=True) with is_approved=True
+    # 2. This is an existing instance that was updated (created=False)
+    
+    # Skip if not approved
+    if not instance.is_approved:
+        return
+    
+    # Get the GPU path of the audio file
+    audio_path = instance.gpu_path
+    
+    # Prepare the payload for the API request
+    payload = {
+        "audio_path": audio_path,
+        'project_id': str(instance.project_id),
+    }
+    
+    # Make the API call to the diarization endpoint
+    try:
+        response = requests.post(
+            DIARIZING_API_URL,
+            json=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        
+        # Check if the request was successful
+        response.raise_for_status()
+        
+        # Optional: Log the successful response
+        print(f"Diarization triggered for {instance.processed_file.name}. Response: {response.json()}")
+        
+    except requests.exceptions.RequestException as e:
+        # Handle any errors that occur during the request
+        print(f"Error triggering diarization for {instance.processed_file.name}: {str(e)}")
+        # You might want to log this error or handle it in some other way
+        # depending on your application's error handling strategy

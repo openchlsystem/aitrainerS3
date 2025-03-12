@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     # Project views
-    ProjectListCreateView, ProjectDetailView,
+    ProcessedAudioFileToggleApprovedView, ProcessedAudioFileToggleDisapprovedView, ProjectListCreateView, ProjectDetailView,
     
     # Audio file views
     AudioFileListCreateView, AudioFileDetailView,
@@ -47,6 +47,8 @@ urlpatterns = [
     # ProcessedAudioFile URLs (replacing CleanedAudioFile)
     path('processed-audio-files/', ProcessedAudioFileListCreateView.as_view(), name='processed-audio-list'),
     path('processed-audio-files/<uuid:pk>/', ProcessedAudioFileDetailView.as_view(), name='processed-audio-detail'),
+    path('processed-audio-files/<uuid:pk>/approve/', ProcessedAudioFileToggleApprovedView.as_view(), name='toggle-approved'),
+    path('processed-audio-files/<uuid:pk>/disapprove/', ProcessedAudioFileToggleDisapprovedView.as_view(), name='toggle-disapproved'),
 
     # DiarizedAudioFile URLs
     path('diarized-audio-files/', DiarizedAudioFileListCreateView.as_view(), name='diarized-audio-list'),

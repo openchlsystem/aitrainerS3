@@ -155,6 +155,10 @@ class ProcessedAudioFileListCreateView(BaseListCreateView):
         if is_diarized is not None:
             is_diarized_bool = is_diarized.lower() == 'true'
             queryset = queryset.filter(is_diarized=is_diarized_bool)
+
+        pending_filter = self.request.query_params.get('pending', None)
+        if pending_filter == 'true':
+            queryset = queryset.filter(is_approved=False, is_disapproved=False)
         
         return queryset
 
@@ -203,6 +207,39 @@ class ProcessedAudioFileDetailView(BaseRetrieveUpdateDestroyView):
     def perform_update(self, serializer):
         serializer.save(updated_by=self.request.user)
 
+class ProcessedAudioFileToggleApprovedView(generics.UpdateAPIView):
+    queryset = ProcessedAudioFile.objects.all()
+    serializer_class = ProcessedAudioFileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ["patch"]
+    
+    def patch(self, request, *args, **kwargs):
+        processed_audio = self.get_object()
+        processed_audio.is_approved = not processed_audio.is_approved
+        processed_audio.updated_by = request.user
+        processed_audio.save()
+        return Response(
+            {"status": "updated", "is_approved": processed_audio.is_approved},
+            status=status.HTTP_200_OK,
+        )
+
+
+class ProcessedAudioFileToggleDisapprovedView(generics.UpdateAPIView):
+    queryset = ProcessedAudioFile.objects.all()
+    serializer_class = ProcessedAudioFileSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    http_method_names = ["patch"]
+    
+    def patch(self, request, *args, **kwargs):
+        processed_audio = self.get_object()
+        processed_audio.is_disapproved = not processed_audio.is_disapproved
+        processed_audio.updated_by = request.user
+        processed_audio.save()
+        return Response(
+            {"status": "updated", "is_disapproved": processed_audio.is_disapproved},
+            status=status.HTTP_200_OK,
+        )
+
 # ✅ DiarizedAudioFile Views
 class DiarizedAudioFileListCreateView(BaseListCreateView):
     queryset = DiarizedAudioFile.objects.all()
@@ -220,12 +257,41 @@ class DiarizedAudioFileListCreateView(BaseListCreateView):
         return queryset
 
     def perform_create(self, serializer):
-        # Ensure a project is provided
-        project_id = self.request.data.get('project')
-        if not project_id:
-            raise serializers.ValidationError({"project": "Project is required"})
+        # Check if the diarized_file is a string (path)
+        diarized_file = self.request.data.get('diarized_file')
         
-        serializer.save(created_by=self.request.user, updated_by=self.request.user)
+        if isinstance(diarized_file, str):
+            # Make sure the path uses the right prefix
+            if not diarized_file.startswith('diarized/'):
+                diarized_file = f"diarized/{diarized_file.split('/')[-1]}"
+            
+            if hasattr(self.request, 'project') and self.request.project:
+                # Create the object directly
+                from django.utils import timezone
+                
+                # Build the instance manually to avoid issues with FileField
+                audio_file = DiarizedAudioFile(
+                    project=self.request.project,
+                    diarization_result_json_path=self.request.data.get('diarization_result_json_path'),
+                    file_size=self.request.data.get('file_size'),
+                    duration=self.request.data.get('duration'),
+                    created_by=self.request.user,
+                    updated_by=self.request.user,
+                    created_at=timezone.now(),
+                    updated_at=timezone.now()
+                )
+                
+                # Bypass normal FileField handling and set path directly
+                audio_file.diarized_file.name = diarized_file
+                
+                # Save without validating the file
+                audio_file.save()
+                serializer.instance = audio_file
+            else:
+                raise serializers.ValidationError({"project": "Project ID header (x-project-id) is required"})
+        else:
+            # Use the parent class implementation for normal file uploads
+            super().perform_create(serializer)
 
 class DiarizedAudioFileDetailView(BaseRetrieveUpdateDestroyView):
     queryset = DiarizedAudioFile.objects.all()
@@ -433,162 +499,6 @@ class AudioChunkEvaluateView(BaseGenericAPIView):
             },
             status=status.HTTP_200_OK,
         )
-
-# Audio File Processing
-@csrf_exempt
-def process_audio_folder(request):
-    if request.method == "POST":
-        try:
-            files = request.FILES.getlist("files")  # Handle file uploads
-            project_id = request.POST.get("project_id")  # Get project ID
-
-            if not files:
-                return JsonResponse({"error": "No files provided."}, status=400)
-
-            if not project_id:
-                return JsonResponse({"error": "Project ID is required."}, status=400)
-
-            try:
-                project = Project.objects.get(unique_id=project_id)
-            except Project.DoesNotExist:
-                return JsonResponse({"error": f"Project with ID {project_id} not found."}, status=404)
-
-            # Pass project to processing function
-            processed_files = process_audio_files_from_uploaded(files, project, request.user)
-            return JsonResponse(
-                {"message": f"Processed {processed_files} audio files."}
-            )
-
-        except Exception as e:
-            print(f"❌ Error processing files: {e}")
-            return JsonResponse({"error": f"Failed to process files: {str(e)}"}, status=500)
-
-    return JsonResponse({"error": "Invalid request method."}, status=405)
-
-
-def process_audio_files_from_uploaded(files, project, user):
-    """Processes uploaded audio files directly."""
-    processed_count = 0
-
-    for file in files:
-        filename = file.name
-        print(f"📂 Processing uploaded file: {filename}")
-
-        if filename.endswith((".ogg", ".wav")):  # Check if file is Ogg or WAV
-            try:
-                # ✅ Save the file temporarily
-                temp_path = default_storage.save(
-                    f"temp/{filename}", ContentFile(file.read())
-                )
-
-                # Convert Ogg to WAV if the file is Ogg Vorbis
-                if filename.endswith(".ogg"):
-                    wav_filename = filename.replace(".ogg", ".wav")
-                    wav_temp_path = convert_ogg_to_wav(temp_path, wav_filename)
-                    if not wav_temp_path:
-                        print(f"⚠️ Skipping {filename} due to conversion failure.")
-                        continue
-                    temp_path = wav_temp_path  # Use the new WAV file for further processing
-                    filename = wav_filename  # Update the filename to .wav
-
-                # ✅ Extract metadata
-                duration, file_size = get_audio_metadata(temp_path)
-
-                if duration is None or file_size is None:
-                    print(f"⚠️ Skipping {filename} due to metadata extraction failure.")
-                    continue
-
-                # ✅ Save file to database
-                audio_id = os.path.splitext(filename)[0]
-                audio_file_instance, created = AudioFile.objects.get_or_create(
-                    audio_id=audio_id,
-                    defaults={
-                        "project": project,  # Set the project
-                        "file_path": f"raw/{filename}",  # Store relative path
-                        "duration": duration, 
-                        "file_size": file_size,
-                        "created_by": user,
-                        "updated_by": user
-                    },
-                )
-
-                if not created:
-                    updated = False
-                    if audio_file_instance.duration is None:
-                        audio_file_instance.duration = duration
-                        updated = True
-                    if audio_file_instance.file_size is None:
-                        audio_file_instance.file_size = file_size
-                        updated = True
-                    if audio_file_instance.project is None:
-                        audio_file_instance.project = project
-                        updated = True
-                    if updated:
-                        audio_file_instance.updated_by = user
-                        audio_file_instance.save()
-
-                # ✅ Copy file to the shared folder
-                destination_path = os.path.join("shared/raw", filename)
-                os.makedirs(os.path.dirname(destination_path), exist_ok=True)
-                
-                with open(temp_path, "rb") as src_file:
-                    with open(destination_path, "wb") as dst_file:
-                        dst_file.write(src_file.read())
-
-                processed_count += 1
-
-                # ✅ Delete temp file after processing
-                default_storage.delete(temp_path)
-
-            except Exception as e:
-                print(f"❌ Error processing file {filename}: {e}")
-
-    return processed_count
-
-
-def convert_ogg_to_wav(input_path, output_filename):
-    """Convert Ogg Vorbis audio to WAV format using ffmpeg."""
-    output_path = os.path.join(os.path.dirname(input_path), output_filename)
-    try:
-        subprocess.run(
-            ["ffmpeg", "-i", input_path, output_path],
-            check=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        print(f"✅ Converted {input_path} to {output_path}")
-        return output_path
-    except subprocess.CalledProcessError as e:
-        print(f"❌ Error converting {input_path} to WAV: {e}")
-        return None
-
-
-def get_audio_metadata(filepath):
-    """Extract metadata using ffprobe"""
-    try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                "-v",
-                "error",
-                "-show_entries",
-                "format=duration,size",
-                "-of",
-                "json",
-                filepath,
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        metadata = json.loads(result.stdout)
-        duration = float(metadata["format"]["duration"])
-        file_size = int(metadata["format"]["size"])
-        return duration, file_size
-    except Exception as e:
-        print(f"❌ Error extracting metadata for {filepath}: {e}")
-        return None, None
-
 
 # Evaluation Results Summary View
 class EvaluationResultsSummaryView(BaseListAPIView):

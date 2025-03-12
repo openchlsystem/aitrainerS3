@@ -77,13 +77,19 @@ class ProcessedAudioFile(BaseModel):
     processed_file = models.FileField(upload_to='processed/')
     file_size = models.PositiveIntegerField(null=True)
     duration = models.FloatField(null=True)
-    is_diarized = models.BooleanField(default=False)
-
+    is_approved = models.BooleanField(default=False)
+    is_disapproved = models.BooleanField(default=False)
     
     @property
     def full_path(self):
         """Return the full path on the S3 server"""
-        return os.path.join('/ai/shared', self.file_path)
+        return os.path.join('shared', self.processed_file.name)
+    
+    @property
+    def gpu_path(self):
+        """Return the full path on the GPU server"""
+        # Path for GPU server uses a different mount point (/mnt/shared)
+        return os.path.join('/mnt/shared', self.processed_file.name)
 
 class CaseRecord(BaseModel):
     project = models.ForeignKey(
@@ -118,7 +124,7 @@ class DiarizedAudioFile(BaseModel):
         related_name="diarized_audio_files",
     )
     # Store relative path to the NFS shared folder
-    diarized_file = models.FileField(upload_to='diarized/')
+    diarized_file = models.FileField(upload_to='diarized/', max_length=500)
     # Store the path to the diarization results JSON
     diarization_result_json_path = models.CharField(max_length=255)
     file_size = models.PositiveIntegerField(null=True)
