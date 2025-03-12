@@ -51,3 +51,4 @@ s3/s3/settings.py
 
 aitrainerS3.code-workspace
 s3/s3/settings/development.py
+s3/shared/
