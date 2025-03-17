@@ -11,7 +11,6 @@ from .models import (
     CaseRecord,
     AudioChunk,
     EvaluationResults,
-    ProcessingTask
 )
 from .serializers import (
     AudioFileSerializer,
@@ -25,7 +24,6 @@ from .serializers import (
     EvaluationResultsSerializer,
     EvaluationResultsLeaderBoardSerializer,
     EvaluationResultsSummarySerializer,
-    ProcessingTaskSerializer,
     ProjectSerializer
 )
 from rest_framework.response import Response
@@ -408,51 +406,51 @@ class EvaluationResultsDetailView(BaseRetrieveUpdateDestroyView):
         serializer.save(updated_by=self.request.user)
 
 # ✅ ProcessingTask Views
-class ProcessingTaskListCreateView(BaseListCreateView):
-    queryset = ProcessingTask.objects.all()
-    serializer_class = ProcessingTaskSerializer
-    permission_classes = [permissions.IsAuthenticated]
+# class ProcessingTaskListCreateView(BaseListCreateView):
+#     queryset = ProcessingTask.objects.all()
+#     serializer_class = ProcessingTaskSerializer
+#     permission_classes = [permissions.IsAuthenticated]
 
-    def get_queryset(self):
-        queryset = super().get_queryset()
+#     def get_queryset(self):
+#         queryset = super().get_queryset()
         
-        # Filter by project
-        project_id = self.request.query_params.get('project_id')
-        if project_id:
-            queryset = queryset.filter(project__unique_id=project_id)
+#         # Filter by project
+#         project_id = self.request.query_params.get('project_id')
+#         if project_id:
+#             queryset = queryset.filter(project__unique_id=project_id)
             
-        # Filter by status
-        status_filter = self.request.query_params.get('status')
-        if status_filter:
-            queryset = queryset.filter(status=status_filter)
+#         # Filter by status
+#         status_filter = self.request.query_params.get('status')
+#         if status_filter:
+#             queryset = queryset.filter(status=status_filter)
             
-        # Filter by task type
-        task_type = self.request.query_params.get('task_type')
-        if task_type:
-            queryset = queryset.filter(task_type=task_type)
+#         # Filter by task type
+#         task_type = self.request.query_params.get('task_type')
+#         if task_type:
+#             queryset = queryset.filter(task_type=task_type)
             
-        # Filter by audio ID
-        audio_id = self.request.query_params.get('audio_id')
-        if audio_id:
-            queryset = queryset.filter(audio_id=audio_id)
+#         # Filter by audio ID
+#         audio_id = self.request.query_params.get('audio_id')
+#         if audio_id:
+#             queryset = queryset.filter(audio_id=audio_id)
             
-        return queryset.order_by('-created_at')
+#         return queryset.order_by('-created_at')
 
-    def perform_create(self, serializer):
-        # Ensure a project is provided
-        project_id = self.request.data.get('project')
-        if not project_id:
-            raise serializers.ValidationError({"project": "Project is required"})
+#     def perform_create(self, serializer):
+#         # Ensure a project is provided
+#         project_id = self.request.data.get('project')
+#         if not project_id:
+#             raise serializers.ValidationError({"project": "Project is required"})
         
-        serializer.save(created_by=self.request.user, updated_by=self.request.user)
+#         serializer.save(created_by=self.request.user, updated_by=self.request.user)
 
-class ProcessingTaskDetailView(BaseRetrieveUpdateDestroyView):
-    queryset = ProcessingTask.objects.all()
-    serializer_class = ProcessingTaskSerializer
-    permission_classes = [permissions.IsAuthenticated]
+# class ProcessingTaskDetailView(BaseRetrieveUpdateDestroyView):
+#     queryset = ProcessingTask.objects.all()
+#     serializer_class = ProcessingTaskSerializer
+#     permission_classes = [permissions.IsAuthenticated]
 
-    def perform_update(self, serializer):
-        serializer.save(updated_by=self.request.user)
+#     def perform_update(self, serializer):
+#         serializer.save(updated_by=self.request.user)
 
 # Audio Chunk Evaluation View
 class AudioChunkEvaluateView(BaseGenericAPIView):

@@ -233,32 +233,32 @@ class EvaluationResults(BaseModel):
         unique_together = ("audiofilechunk", "created_by")
 
 # Asynchronous task tracking
-class ProcessingTask(BaseModel):
-    project = models.ForeignKey(
-        Project,
-        on_delete=models.CASCADE,
-        related_name="processing_tasks",
-    )
-    TASK_TYPES = [
-        ('PREPROCESS', 'Audio Preprocessing'),
-        ('DIARIZE', 'Speaker Diarization'),
-        ('CHUNK', 'Audio Chunking'),
-    ]
+# class ProcessingTask(BaseModel):
+#     project = models.ForeignKey(
+#         Project,
+#         on_delete=models.CASCADE,
+#         related_name="processing_tasks",
+#     )
+#     TASK_TYPES = [
+#         ('PREPROCESS', 'Audio Preprocessing'),
+#         ('DIARIZE', 'Speaker Diarization'),
+#         ('CHUNK', 'Audio Chunking'),
+#     ]
     
-    STATUS_CHOICES = [
-        ('PENDING', 'Pending'),
-        ('PROCESSING', 'Processing'),
-        ('COMPLETED', 'Completed'),
-        ('FAILED', 'Failed'),
-    ]
+#     STATUS_CHOICES = [
+#         ('PENDING', 'Pending'),
+#         ('PROCESSING', 'Processing'),
+#         ('COMPLETED', 'Completed'),
+#         ('FAILED', 'Failed'),
+#     ]
     
-    # Store the audio_id as a string reference without direct FK relationship
-    audio_id = models.CharField(max_length=50)
-    task_type = models.CharField(max_length=20, choices=TASK_TYPES)
-    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
-    error_message = models.TextField(null=True, blank=True)
-    result_path = models.CharField(max_length=255, null=True, blank=True)
+#     # Store the audio_id as a string reference without direct FK relationship
+#     audio_id = models.CharField(max_length=50)
+#     task_type = models.CharField(max_length=20, choices=TASK_TYPES)
+#     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+#     error_message = models.TextField(null=True, blank=True)
+#     result_path = models.CharField(max_length=255, null=True, blank=True)
     
-    # Add timestamps for tracking task progress
-    started_at = models.DateTimeField(null=True, blank=True)
-    completed_at = models.DateTimeField(null=True, blank=True)
+#     # Add timestamps for tracking task progress
+#     started_at = models.DateTimeField(null=True, blank=True)
+#     completed_at = models.DateTimeField(null=True, blank=True)

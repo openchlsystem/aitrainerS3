@@ -26,7 +26,7 @@ from .views import (
     ChunkStatisticsView, EvaluationCategoryStatisticsView,
     
     # Processing tasks
-    ProcessingTaskListCreateView, ProcessingTaskDetailView,
+    # ProcessingTaskListCreateView, ProcessingTaskDetailView,
     
     # Specialized views
     ChunksForTranscriptionView, LeaderboardView,
@@ -64,8 +64,8 @@ urlpatterns = [
     path('audio-chunks/<uuid:pk>/evaluate/', AudioChunkEvaluateView.as_view(), name='audiochunk-evaluate'),
 
     # ProcessingTask URLs
-    path('processing-tasks/', ProcessingTaskListCreateView.as_view(), name='processing-task-list'),
-    path('processing-tasks/<uuid:pk>/', ProcessingTaskDetailView.as_view(), name='processing-task-detail'),
+    # path('processing-tasks/', ProcessingTaskListCreateView.as_view(), name='processing-task-list'),
+    # path('processing-tasks/<uuid:pk>/', ProcessingTaskDetailView.as_view(), name='processing-task-detail'),
 
     # Statistics URLs
     path('chunk-statistics/', ChunkStatisticsView.as_view(), name='chunk-statistics'),

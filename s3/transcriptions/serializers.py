@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
     AudioFile, ProcessedAudioFile, CaseRecord, DiarizedAudioFile, 
-    AudioChunk, EvaluationResults, ProcessingTask, Project
+    AudioChunk, EvaluationResults, Project
 )
 from django.db.models import Count, Sum, IntegerField, ExpressionWrapper, FloatField
 
@@ -93,14 +93,14 @@ class EvaluationResultsSerializer(serializers.ModelSerializer):
         read_only_fields = ['created_by', 'updated_by', 'evaluation_date']
 
 
-class ProcessingTaskSerializer(serializers.ModelSerializer):
-    created_by = serializers.ReadOnlyField(source='created_by.whatsapp_number')
-    updated_by = serializers.ReadOnlyField(source='updated_by.whatsapp_number')
-    project = serializers.PrimaryKeyRelatedField(read_only=True)
+# class ProcessingTaskSerializer(serializers.ModelSerializer):
+#     created_by = serializers.ReadOnlyField(source='created_by.whatsapp_number')
+#     updated_by = serializers.ReadOnlyField(source='updated_by.whatsapp_number')
+#     project = serializers.PrimaryKeyRelatedField(read_only=True)
 
-    class Meta:
-        model = ProcessingTask
-        fields = '__all__'
+#     class Meta:
+#         model = ProcessingTask
+#         fields = '__all__'
 
 
     
