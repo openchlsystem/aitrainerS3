@@ -44,7 +44,7 @@ class AudioFile(BaseModel):
         on_delete=models.CASCADE,
         related_name="audio_files",
     )
-    audio_id = models.CharField(max_length=50, unique=True)
+    audio_id = models.CharField(max_length=50, unique=False)
     # Store relative path to the NFS shared folder
     audio_file = models.FileField(upload_to='raw/')
     file_size = models.PositiveIntegerField(null=True)
@@ -133,12 +133,23 @@ class DiarizedAudioFile(BaseModel):
     @property
     def full_path(self):
         """Return the full path on the S3 server"""
-        return os.path.join('/ai/shared', self.file_path)
+        return os.path.join('shared', self.diarized_file.name)
     
     @property
     def diarization_json_full_path(self):
         """Return the full path to the diarization JSON on the S3 server"""
-        return os.path.join('/ai/shared', self.diarization_json_path)
+        return os.path.join('shared', self.diarization_result_json_path)
+    
+    @property
+    def gpu_path(self):
+        """Return the full path on the GPU server"""
+        # Path for GPU server uses a different mount point (/mnt/shared)
+        return os.path.join('/mnt/shared', self.diarized_file.name)
+    
+    @property
+    def diarization_json_gpu_path(self):
+        """Return the full path to the diarization JSON on the GPU server"""
+        return os.path.join('/mnt/shared', self.diarization_result_json_path)
 
 
 # Audio chunks without direct foreign key relationships to promote anonymity
@@ -148,7 +159,7 @@ class AudioChunk(BaseModel):
         on_delete=models.CASCADE,
         related_name="audio_chunks",
     )
-    chunk_file = models.FileField(upload_to='chunks/')
+    chunk_file = models.FileField(upload_to='chunks/', max_length=500)
     
     GENDER_CHOICES = [
         ("male", "Male"),
@@ -191,7 +202,13 @@ class AudioChunk(BaseModel):
     @property
     def full_path(self):
         """Return the full path on the S3 server"""
-        return os.path.join('/ai/shared', self.file_path)
+        return os.path.join('shared', self.chunk_file)
+    
+    @property
+    def gpu_path(self):
+        """Return the full path on the GPU server"""
+        # Path for GPU server uses a different mount point (/mnt/shared)
+        return os.path.join('/mnt/shared', self.chunk_file)
 
 class EvaluationResults(BaseModel):
     project = models.ForeignKey(

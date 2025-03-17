@@ -1,42 +1,20 @@
-# import os
-# from django.db.models.signals import post_save
-# from django.dispatch import receiver
-# from django.conf import settings
-# from .models import CleanedAudioFile
-# from .utils import split_and_save_chunks
-
-# @receiver(post_save, sender=CleanedAudioFile)
-# def handle_cleaned_audio_file_save(sender, instance, created, **kwargs):
-#     """
-#     Signal that listens for the post_save event of the cleaned_audio_file model.
-#     If is_evaluated is True, it triggers the split_and_save_chunks function.
-#     """
-#     if instance.is_approved:
-#         # Call the chunk splitting function
-#         num_chunks = split_and_save_chunks(
-#             audio_obj=instance,
-#             output_format='wav',                # Output format
-#             min_chunk_length_ms=3000,          # Minimum chunk length in ms
-#             max_chunk_length_ms=7000,          # Maximum chunk length in ms
-#             frame_length_ms=30,                # Frame length in ms
-#             sr=16000,                          # Sample rate
-#             overlap_ms=2000                    # Overlap in ms
-#         )
-#         print(f"{num_chunks} chunks created and saved for audio: {instance.audio_file.name}.")
-
-import os
+import logging
 import requests
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.conf import settings
 
-from .models import AudioFile, ProcessedAudioFile
+from .models import AudioFile, DiarizedAudioFile, ProcessedAudioFile
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 # Define the preprocessing API endpoint URL
 # You should store this in your Django settings
 GPU_SERVER_BASE_URL = getattr(settings, 'GPU_SERVER_BASE_URL')
 PREPROCESSING_API_URL = f'{GPU_SERVER_BASE_URL}/audio/preprocess/'
 DIARIZING_API_URL = f'{GPU_SERVER_BASE_URL}/audio/diarize/'
+CHUNKING_API_URL = f'{GPU_SERVER_BASE_URL}/audio/chunk/'
 
 @receiver(post_save, sender=AudioFile)
 def trigger_audio_preprocessing(sender, instance, created, **kwargs):
@@ -133,3 +111,53 @@ def trigger_diarization(sender, instance, created, **kwargs):
         print(f"Error triggering diarization for {instance.processed_file.name}: {str(e)}")
         # You might want to log this error or handle it in some other way
         # depending on your application's error handling strategy
+
+@receiver(post_save, sender=DiarizedAudioFile)
+def trigger_chunking(sender, instance, created, **kwargs):
+    """
+    Signal to trigger chunking when a DiarizedAudioFile is created or updated.
+    This signal sends a POST request to the chunking endpoint with the necessary paths.
+    """
+    # Only proceed if this is a new instance
+    # For chunking, we typically want to process new files immediately
+    if not created:
+        return
+    
+    # Get the GPU path of the audio file and diarization result
+    audio_path = instance.gpu_path
+    diarization_result = instance.diarization_json_gpu_path
+    
+    # Prepare the payload for the API request
+    payload = {
+        "audio_path": audio_path,
+        "diarization_result": diarization_result,
+        "project_id": str(instance.project_id),
+    }
+    
+    logger.info(f"Preparing to trigger chunking for {instance.diarized_file.name}")
+    
+    # Make the API call to the chunking endpoint
+    try:
+        response = requests.post(
+            CHUNKING_API_URL,
+            json=payload,
+            headers={"Content-Type": "application/json"}
+        )
+        
+        # Check if the request was successful
+        response.raise_for_status()
+        
+        # Log the successful response
+        logger.info(f"Chunking triggered for {instance.diarized_file.name}. Response: {response.json()}")
+        
+    except requests.exceptions.RequestException as e:
+        # Handle any errors that occur during the request
+        logger.error(f"Error triggering chunking for {instance.diarized_file.name}: {str(e)}")
+        
+        # If there's a response, try to log it for debugging
+        if hasattr(e, 'response') and e.response is not None:
+            try:
+                error_details = e.response.json()
+                logger.error(f"Error details: {error_details}")
+            except ValueError:
+                logger.error(f"Error response (non-JSON): {e.response.text}")

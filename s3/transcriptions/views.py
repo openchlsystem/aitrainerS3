@@ -150,12 +150,6 @@ class ProcessedAudioFileListCreateView(BaseListCreateView):
     def get_queryset(self):
         queryset = super().get_queryset()  # This will apply project filtering from BaseListCreateView
         
-        # Filter by is_diarized if provided
-        is_diarized = self.request.query_params.get('is_diarized')
-        if is_diarized is not None:
-            is_diarized_bool = is_diarized.lower() == 'true'
-            queryset = queryset.filter(is_diarized=is_diarized_bool)
-
         pending_filter = self.request.query_params.get('pending', None)
         if pending_filter == 'true':
             queryset = queryset.filter(is_approved=False, is_disapproved=False)
@@ -180,7 +174,6 @@ class ProcessedAudioFileListCreateView(BaseListCreateView):
                     project=self.request.project,
                     file_size=self.request.data.get('file_size'),
                     duration=self.request.data.get('duration'),
-                    is_diarized=self.request.data.get('is_diarized', False),
                     created_by=self.request.user,
                     updated_by=self.request.user,
                     created_at=timezone.now(),
@@ -340,12 +333,39 @@ class AudioChunkListCreateView(BaseListCreateView):
         return queryset
 
     def perform_create(self, serializer):
-        # Ensure a project is provided
-        project_id = self.request.data.get('project')
-        if not project_id:
-            raise serializers.ValidationError({"project": "Project is required"})
+        # Check if the chunk_file is a string (path)
+        chunk_file = self.request.data.get('chunk_file')
         
-        serializer.save(created_by=self.request.user, updated_by=self.request.user)
+        if isinstance(chunk_file, str):
+            # Make sure the path uses the right prefix
+            if not chunk_file.startswith('chunks/'):
+                chunk_file = f"chunks/{chunk_file.split('/')[-1]}"
+            
+            if hasattr(self.request, 'project') and self.request.project:
+                # Create the object directly
+                from django.utils import timezone
+                
+                # Build the instance manually to avoid issues with FileField
+                audio_chunk = AudioChunk(
+                    project=self.request.project,
+                    duration=self.request.data.get('duration'),
+                    created_by=self.request.user,
+                    updated_by=self.request.user,
+                    created_at=timezone.now(),
+                    updated_at=timezone.now()
+                )
+                
+                # Bypass normal FileField handling and set path directly
+                audio_chunk.chunk_file.name = chunk_file
+                
+                # Save without validating the file
+                audio_chunk.save()
+                serializer.instance = audio_chunk
+            else:
+                raise serializers.ValidationError({"project": "Project ID header (x-project-id) is required"})
+        else:
+            # Use the parent class implementation for normal file uploads
+            super().perform_create(serializer)
 
 class AudioChunkDetailView(BaseRetrieveUpdateDestroyView):
     queryset = AudioChunk.objects.all()
@@ -518,23 +538,17 @@ class EvaluationResultsSummaryView(BaseListAPIView):
         return queryset
 
 
-class EvaluationChunkCategoryView(APIView):
+class EvaluationChunkCategoryView(BaseGenericAPIView):
     serializer_class = EvaluationChunkCategorySerializer
     permission_classes = [permissions.IsAuthenticated]
+    queryset = AudioChunk.objects.all()  # Define the base queryset
 
     def get(self, request, *args, **kwargs):
         user = request.user
         
-        # Filter by project if provided
-        project_id = request.query_params.get('project_id')
-        base_queryset = AudioChunk.objects.all()
-        
-        if project_id:
-            try:
-                project = Project.objects.get(unique_id=project_id)
-                base_queryset = base_queryset.filter(project=project)
-            except Project.DoesNotExist:
-                return Response({"error": f"Project with ID {project_id} not found"}, status=status.HTTP_404_NOT_FOUND)
+        # Get the filtered queryset from the base class
+        # This already handles the project filtering from request.project
+        base_queryset = self.get_queryset()
 
         # Subquery to count evaluations per chunk
         evaluation_counts = EvaluationResults.objects.filter(
@@ -552,7 +566,9 @@ class EvaluationChunkCategoryView(APIView):
         two_evaluations_chunks = list(chunks.filter(evaluation_count=2).values())
 
         # Helper function to build full URL
-        
+        def get_full_url(chunk):
+            chunk_obj = AudioChunk.objects.get(unique_id=chunk['unique_id'])
+            return request.build_absolute_uri(f"/shared/{chunk_obj.chunk_file}")
 
         # Collect unique_ids for categorized chunks (excluding not_evaluated)
         evaluated_chunk_ids = [chunk["unique_id"] for chunk in one_evaluation_chunks + two_evaluations_chunks]
@@ -568,11 +584,8 @@ class EvaluationChunkCategoryView(APIView):
         # Append evaluated_by_user boolean to the required categories
         for chunk in one_evaluation_chunks + two_evaluations_chunks:
             chunk["evaluated_by_user"] = chunk["unique_id"] in user_evaluated_set
-        def get_full_url(chunk):
-            chunk_obj = AudioChunk.objects.get(unique_id=chunk['unique_id'])
-            return request.build_absolute_uri(f"/media/{chunk_obj.file_path}")
         
-        # Append full URL for file_path
+        # Append full URL for chunk_file
         for chunk in not_evaluated_chunks:
             chunk['file_url'] = get_full_url(chunk)
 
@@ -587,7 +600,6 @@ class EvaluationChunkCategoryView(APIView):
             "one_evaluation": one_evaluation_chunks,
             "two_evaluations": two_evaluations_chunks,
         })
-
 
 # Chunks for Transcription View
 class ChunksForTranscriptionView(APIView):
@@ -644,14 +656,14 @@ class ChunksForTranscriptionView(APIView):
         
         # Helper function to get full URL
         def get_full_url(chunk):
-            return request.build_absolute_uri(f"/media/{chunk.file_path}")
+            return request.build_absolute_uri(f"/media/{chunk.chunk_file}")
         
         # Serialize chunks
         resultingChunks = AudioChunkSerializer(
             chunks_for_transcription, many=True
         ).data
         
-        # Append full URL for file_path
+        # Append full URL for chunk_file
         for chunk in resultingChunks:
             chunk['file_url'] = get_full_url(AudioChunk.objects.get(unique_id=chunk['unique_id']))
 
@@ -661,24 +673,18 @@ class ChunksForTranscriptionView(APIView):
 
 
 # Chunk Statistics View
-class ChunkStatisticsView(APIView):
+class ChunkStatisticsView(BaseGenericAPIView):
     serializer_class = ChunkStatisticsSerializer
     permission_classes = [permissions.IsAuthenticated]
-
+    queryset = AudioChunk.objects.all()  # Define the base queryset
+    
     def get(self, request, *args, **kwargs):
-        # Filter by project if provided
-        project_id = request.query_params.get('project_id')
-        base_queryset = AudioChunk.objects.all()
+        # Get the filtered queryset from the base class
+        # This already handles the project filtering from request.project
+        base_queryset = self.get_queryset()
         
-        if project_id:
-            try:
-                project = Project.objects.get(unique_id=project_id)
-                base_queryset = base_queryset.filter(project=project)
-            except Project.DoesNotExist:
-                return Response({"error": f"Project with ID {project_id} not found"}, status=status.HTTP_404_NOT_FOUND)
+        total_choices = 5
         
-        total_choices = 5  # Updated to match new evaluation fields count
-
         evaluation_summary = (
             EvaluationResults.objects.filter(audiofilechunk=OuterRef("unique_id"))
             .values("audiofilechunk")
@@ -703,12 +709,12 @@ class ChunkStatisticsView(APIView):
             )
             .values("evaluation_count", "score")
         )
-
+        
         chunks = base_queryset.annotate(
             evaluation_count=Subquery(evaluation_summary.values("evaluation_count")),
             score=Subquery(evaluation_summary.values("score")),
         )
-
+        
         total_chunks = chunks.count()
         not_evaluated = chunks.filter(evaluation_count__isnull=True).count()
         one_evaluation = chunks.filter(evaluation_count=1).count()
@@ -720,13 +726,12 @@ class ChunkStatisticsView(APIView):
         transcribed_chunks = (
             chunks.exclude(feature_text__isnull=True).exclude(feature_text="").count()
         )
-
         evaluation_completion_rate = (
             ((total_chunks - not_evaluated) / total_chunks) * 100
             if total_chunks > 0
             else 0
         )
-
+        
         stats = {
             "total_chunks": total_chunks,
             "not_evaluated": not_evaluated,
@@ -737,35 +742,28 @@ class ChunkStatisticsView(APIView):
             "evaluation_completion_rate": round(evaluation_completion_rate, 2),
             "transcribed_chunks": transcribed_chunks,
         }
-
         return Response(stats)
 
-
 # Evaluation Category Statistics View
-class EvaluationCategoryStatisticsView(APIView):
+class EvaluationCategoryStatisticsView(BaseGenericAPIView):
     serializer_class = EvaluationCategoryStatisticsSerializer
     permission_classes = [permissions.IsAuthenticated]
+    queryset = EvaluationResults.objects.all()  # Define the base queryset
 
     def get(self, request, *args, **kwargs):
-        # Filter by project if provided
-        project_id = request.query_params.get('project_id')
-        queryset = EvaluationResults.objects.all()
-        
-        if project_id:
-            try:
-                project = Project.objects.get(unique_id=project_id)
-                queryset = queryset.filter(project=project)
-            except Project.DoesNotExist:
-                return Response({"error": f"Project with ID {project_id} not found"}, status=status.HTTP_404_NOT_FOUND)
+        # Get the filtered queryset from the base class
+        # This already handles the project filtering from request.project
+        queryset = self.get_queryset()
         
         total_evaluations = queryset.count()
 
-        stats = EvaluationResults.objects.aggregate(
-            dual_speaker_count=Sum("dual_speaker", output_field=IntegerField()),
+        # Using the filtered queryset for aggregations
+        stats = queryset.aggregate(
+            dual_speaker_count=Sum("not_clear", output_field=IntegerField()),
             speaker_overlap_count=Sum("speaker_overlap", output_field=IntegerField()),
             background_noise_count=Sum("background_noise", output_field=IntegerField()),
             prolonged_silence_count=Sum(
-                "prolonged_silence", output_field=IntegerField()
+                "silence", output_field=IntegerField()
             ),
             not_normal_speech_rate_count=Sum(
                 "not_normal_speech_rate", output_field=IntegerField()
@@ -780,23 +778,33 @@ class EvaluationCategoryStatisticsView(APIView):
 
         return Response(stats)
 
-class LeaderboardView(APIView):
+class LeaderboardView(BaseGenericAPIView):
+    queryset = EvaluationResults.objects.all()  # Define the base queryset
+    
     def get(self, request, *args, **kwargs):
-        leaderboard_data = EvaluationResultsLeaderBoardSerializer.get_leaderboard()
+        # Get the filtered queryset from the base class
+        filtered_queryset = self.get_queryset()
+        
+        # Get leaderboard data using the filtered queryset
+        leaderboard_data = EvaluationResultsLeaderBoardSerializer.get_leaderboard(
+            queryset=filtered_queryset
+        )
+        
         serializer = EvaluationResultsLeaderBoardSerializer(leaderboard_data, many=True)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
-class AudioFilesBulkUploadView(APIView):
+class AudioFilesBulkUploadView(BaseGenericAPIView):
     """
     View to handle bulk audio file uploads from the Vue3 frontend
     Supports folder upload where users select a folder containing audio files
     """
     permission_classes = [permissions.IsAuthenticated]
     parser_classes = [MultiPartParser, FormParser]
+    queryset = AudioFile.objects.all()  # Adding a queryset attribute
     
     def post(self, request):
         try:
-           # Get project from request (set by middleware)
+            # Get project from request (set by middleware)
             if not hasattr(request, 'project') or not request.project:
                 return JsonResponse({"error": "Project ID header (x-project-id) is required"}, status=400)
             
@@ -851,8 +859,8 @@ class AudioFilesBulkUploadView(APIView):
                 try:
                     audio_file_obj, created = AudioFile.objects.get_or_create(
                         audio_id=audio_id,
+                        project=project,  # Add project to filter criteria for get_or_create
                         defaults={
-                            'project': project,
                             'audio_file': file_path,
                             'file_size': file_size,
                             'duration': duration,

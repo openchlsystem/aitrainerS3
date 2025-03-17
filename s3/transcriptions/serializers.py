@@ -71,6 +71,7 @@ class CaseRecordSerializer(serializers.ModelSerializer):
 
 
 class AudioChunkSerializer(serializers.ModelSerializer):
+    chunk_file = FilePathField()
     created_by = serializers.ReadOnlyField(source='created_by.whatsapp_number')
     updated_by = serializers.ReadOnlyField(source='updated_by.whatsapp_number')
     project = serializers.PrimaryKeyRelatedField(read_only=True)
@@ -126,9 +127,13 @@ class EvaluationResultsLeaderBoardSerializer(serializers.Serializer):
     evaluations_done = serializers.IntegerField()
 
     @staticmethod
-    def get_leaderboard():
+    def get_leaderboard(queryset=None):
+        # Use provided queryset or default to all results
+        if queryset is None:
+            queryset = EvaluationResults.objects.all()
+            
         # Aggregate the number of evaluations done by each user (grouped by 'created_by')
-        result = EvaluationResults.objects.select_related('created_by').values('created_by__first_name').annotate(evaluations_done=Count('unique_id'))
+        result = queryset.select_related('created_by').values('created_by__first_name').annotate(evaluations_done=Count('unique_id'))
         return result
     
 
