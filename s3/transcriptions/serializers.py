@@ -141,7 +141,8 @@ class EvaluationResultsSummarySerializer(serializers.Serializer):
     audiofilechunk = serializers.UUIDField()
     not_clear_count = serializers.IntegerField()
     speaker_overlap_count = serializers.IntegerField()
-    background_noise_count = serializers.IntegerField()
+    dual_speaker_count = serializers.IntegerField()
+    interruptive_background_noise_count = serializers.IntegerField()
     silence_count = serializers.IntegerField()
     incomplete_word_count = serializers.IntegerField()
     total_boolean_sum = serializers.IntegerField()
@@ -150,7 +151,7 @@ class EvaluationResultsSummarySerializer(serializers.Serializer):
 
     @classmethod
     def get_queryset(cls, project=None):
-        total_choices = 5  # Number of boolean fields
+        total_choices = 6  # Updated number of boolean fields
         queryset = EvaluationResults.objects.values('audiofilechunk')
     
         # Filter by project if provided
@@ -161,13 +162,15 @@ class EvaluationResultsSummarySerializer(serializers.Serializer):
             evaluation_count=Count('unique_id'),
             not_clear_count=Sum('not_clear', output_field=IntegerField()),
             speaker_overlap_count=Sum('speaker_overlap', output_field=IntegerField()),
-            background_noise_count=Sum('background_noise', output_field=IntegerField()),
+            dual_speaker_count=Sum('dual_speaker', output_field=IntegerField()),
+            interruptive_background_noise_count=Sum('interruptive_background_noise', output_field=IntegerField()),
             silence_count=Sum('silence', output_field=IntegerField()),
             incomplete_word_count=Sum('incomplete_word', output_field=IntegerField()),
             total_boolean_sum=ExpressionWrapper(
                 Sum('not_clear', output_field=IntegerField()) +
                 Sum('speaker_overlap', output_field=IntegerField()) +
-                Sum('background_noise', output_field=IntegerField()) +
+                Sum('dual_speaker', output_field=IntegerField()) +
+                Sum('interruptive_background_noise', output_field=IntegerField()) +
                 Sum('silence', output_field=IntegerField()) +
                 Sum('incomplete_word', output_field=IntegerField()),
                 output_field=IntegerField()
@@ -176,7 +179,8 @@ class EvaluationResultsSummarySerializer(serializers.Serializer):
                 (
                     Sum('not_clear', output_field=IntegerField()) +
                     Sum('speaker_overlap', output_field=IntegerField()) +
-                    Sum('background_noise', output_field=IntegerField()) +
+                    Sum('dual_speaker', output_field=IntegerField()) +
+                    Sum('interruptive_background_noise', output_field=IntegerField()) +
                     Sum('silence', output_field=IntegerField()) +
                     Sum('incomplete_word', output_field=IntegerField())
                 ) / (Count('unique_id') * total_choices),
@@ -188,7 +192,26 @@ class EvaluationResultsSummarySerializer(serializers.Serializer):
 class EvaluationCategoryStatisticsSerializer(serializers.Serializer):
     not_clear_count = serializers.IntegerField()
     speaker_overlap_count = serializers.IntegerField()
-    background_noise_count = serializers.IntegerField()
+    dual_speaker_count = serializers.IntegerField()
+    interruptive_background_noise_count = serializers.IntegerField()
     silence_count = serializers.IntegerField()
     incomplete_word_count = serializers.IntegerField()
     total_evaluated_chunks = serializers.IntegerField()
+
+    @classmethod
+    def get_queryset(cls, project=None):
+        queryset = EvaluationResults.objects
+        
+        # Filter by project if provided
+        if project:
+            queryset = queryset.filter(project=project)
+        
+        return {
+            'not_clear_count': queryset.filter(not_clear=True).count(),
+            'speaker_overlap_count': queryset.filter(speaker_overlap=True).count(),
+            'dual_speaker_count': queryset.filter(dual_speaker=True).count(),
+            'interruptive_background_noise_count': queryset.filter(interruptive_background_noise=True).count(),
+            'silence_count': queryset.filter(silence=True).count(),
+            'incomplete_word_count': queryset.filter(incomplete_word=True).count(),
+            'total_evaluated_chunks': queryset.count()
+        }

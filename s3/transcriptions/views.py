@@ -475,7 +475,8 @@ class AudioChunkEvaluateView(BaseGenericAPIView):
         # Get evaluation fields from request data
         not_clear = str(data.get("not_clear", "false")).lower() == "true"
         speaker_overlap = str(data.get("speaker_overlap", "false")).lower() == "true"
-        background_noise = str(data.get("background_noise", "false")).lower() == "true"
+        dual_speaker = str(data.get("dual_speaker", "false")).lower() == "true"
+        interruptive_background_noise = str(data.get("interruptive_background_noise", "false")).lower() == "true"
         silence = str(data.get("silence", "false")).lower() == "true"
         incomplete_word = str(data.get("incomplete_word", "false")).lower() == "true"
         evaluation_notes = data.get("evaluation_notes", "")
@@ -491,7 +492,8 @@ class AudioChunkEvaluateView(BaseGenericAPIView):
                 "project": project,  # Ensure project is set
                 "not_clear": not_clear,
                 "speaker_overlap": speaker_overlap,
-                "background_noise": background_noise,
+                "dual_speaker": dual_speaker,
+                "interruptive_background_noise": interruptive_background_noise,
                 "silence": silence,
                 "incomplete_word": incomplete_word,
                 "evaluation_notes": evaluation_notes,
@@ -517,7 +519,7 @@ class AudioChunkEvaluateView(BaseGenericAPIView):
             },
             status=status.HTTP_200_OK,
         )
-
+    
 # Evaluation Results Summary View
 class EvaluationResultsSummaryView(BaseListAPIView):
     serializer_class = EvaluationResultsSummarySerializer
@@ -615,7 +617,7 @@ class ChunksForTranscriptionView(APIView):
             except Project.DoesNotExist:
                 return Response({"error": f"Project with ID {project_id} not found"}, status=status.HTTP_404_NOT_FOUND)
         
-        total_choices = 5  # Updated to match new evaluation fields count
+        total_choices = 6  # Updated to match new evaluation fields count
 
         # Subquery to count evaluations and calculate score
         evaluation_summary = (
@@ -625,14 +627,16 @@ class ChunksForTranscriptionView(APIView):
                 evaluation_count=Count("unique_id"),
                 total_boolean_sum=Sum("not_clear", output_field=IntegerField())
                 + Sum("speaker_overlap", output_field=IntegerField())
-                + Sum("background_noise", output_field=IntegerField())
+                + Sum("dual_speaker", output_field=IntegerField())
+                + Sum("interruptive_background_noise", output_field=IntegerField())
                 + Sum("silence", output_field=IntegerField())
                 + Sum("incomplete_word", output_field=IntegerField()),
                 score=ExpressionWrapper(
                     (
                         Sum("not_clear", output_field=IntegerField())
                         + Sum("speaker_overlap", output_field=IntegerField())
-                        + Sum("background_noise", output_field=IntegerField())
+                        + Sum("dual_speaker", output_field=IntegerField())
+                        + Sum("interruptive_background_noise", output_field=IntegerField())
                         + Sum("silence", output_field=IntegerField())
                         + Sum("incomplete_word", output_field=IntegerField())
                     )
@@ -681,7 +685,7 @@ class ChunkStatisticsView(BaseGenericAPIView):
         # This already handles the project filtering from request.project
         base_queryset = self.get_queryset()
         
-        total_choices = 5
+        total_choices = 6  # Updated to match new evaluation fields count
         
         evaluation_summary = (
             EvaluationResults.objects.filter(audiofilechunk=OuterRef("unique_id"))
@@ -690,14 +694,16 @@ class ChunkStatisticsView(BaseGenericAPIView):
                 evaluation_count=Count("unique_id"),
                 total_boolean_sum=Sum("not_clear", output_field=IntegerField())
                 + Sum("speaker_overlap", output_field=IntegerField())
-                + Sum("background_noise", output_field=IntegerField())
+                + Sum("dual_speaker", output_field=IntegerField())
+                + Sum("interruptive_background_noise", output_field=IntegerField())
                 + Sum("silence", output_field=IntegerField())
                 + Sum("incomplete_word", output_field=IntegerField()),
                 score=ExpressionWrapper(
                     (
                         Sum("not_clear", output_field=IntegerField())
                         + Sum("speaker_overlap", output_field=IntegerField())
-                        + Sum("background_noise", output_field=IntegerField())
+                        + Sum("dual_speaker", output_field=IntegerField())
+                        + Sum("interruptive_background_noise", output_field=IntegerField())
                         + Sum("silence", output_field=IntegerField())
                         + Sum("incomplete_word", output_field=IntegerField())
                     )
@@ -757,24 +763,25 @@ class EvaluationCategoryStatisticsView(BaseGenericAPIView):
 
         # Using the filtered queryset for aggregations
         stats = queryset.aggregate(
-            dual_speaker_count=Sum("not_clear", output_field=IntegerField()),
+            not_clear_count=Sum("not_clear", output_field=IntegerField()),
             speaker_overlap_count=Sum("speaker_overlap", output_field=IntegerField()),
-            background_noise_count=Sum("background_noise", output_field=IntegerField()),
-            prolonged_silence_count=Sum(
-                "silence", output_field=IntegerField()
+            dual_speaker_count=Sum("dual_speaker", output_field=IntegerField()),
+            interruptive_background_noise_count=Sum(
+                "interruptive_background_noise", output_field=IntegerField()
             ),
-            not_normal_speech_rate_count=Sum(
-                "not_normal_speech_rate", output_field=IntegerField()
-            ),
-            echo_noise_count=Sum("echo_noise", output_field=IntegerField()),
-            incomplete_sentence_count=Sum(
-                "incomplete_sentence", output_field=IntegerField()
-            ),
+            silence_count=Sum("silence", output_field=IntegerField()),
+            incomplete_word_count=Sum("incomplete_word", output_field=IntegerField()),
         )
 
-        stats["total_evaluations"] = total_evaluations
+        # Replace None values with 0
+        for key in stats:
+            if stats[key] is None:
+                stats[key] = 0
+
+        stats["total_evaluated_chunks"] = total_evaluations
 
         return Response(stats)
+    
 
 class LeaderboardView(BaseGenericAPIView):
     queryset = EvaluationResults.objects.all()  # Define the base queryset
