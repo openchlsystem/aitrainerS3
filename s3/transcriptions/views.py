@@ -650,7 +650,7 @@ class ChunksForTranscriptionView(APIView):
         
         # Helper function to get full URL
         def get_full_url(chunk):
-            return request.build_absolute_uri(f"/media/{chunk.chunk_file}")
+            return request.build_absolute_uri(f"/shared/{chunk.chunk_file}")
         
         # Serialize chunks
         resultingChunks = AudioChunkSerializer(

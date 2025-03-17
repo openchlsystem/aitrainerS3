@@ -71,7 +71,7 @@ class CaseRecordSerializer(serializers.ModelSerializer):
 
 
 class AudioChunkSerializer(serializers.ModelSerializer):
-    chunk_file = FilePathField()
+    chunk_file = FilePathField(required=False)
     created_by = serializers.ReadOnlyField(source='created_by.whatsapp_number')
     updated_by = serializers.ReadOnlyField(source='updated_by.whatsapp_number')
     project = serializers.PrimaryKeyRelatedField(read_only=True)
