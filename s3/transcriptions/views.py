@@ -537,7 +537,6 @@ class EvaluationResultsSummaryView(BaseListAPIView):
             
         return queryset
 
-
 class EvaluationChunkCategoryView(BaseGenericAPIView):
     serializer_class = EvaluationChunkCategorySerializer
     permission_classes = [permissions.IsAuthenticated]
@@ -563,7 +562,8 @@ class EvaluationChunkCategoryView(BaseGenericAPIView):
         # Categorize and fetch full chunk details
         not_evaluated_chunks = list(chunks.filter(evaluation_count__isnull=True).values())
         one_evaluation_chunks = list(chunks.filter(evaluation_count=1).values())
-        two_evaluations_chunks = list(chunks.filter(evaluation_count=2).values())
+        # Modified to focus on chunks with exactly 1 evaluation (not 2)
+        # since we now need only 2 evaluations total for transcription
 
         # Helper function to build full URL
         def get_full_url(chunk):
@@ -571,7 +571,7 @@ class EvaluationChunkCategoryView(BaseGenericAPIView):
             return request.build_absolute_uri(f"/shared/{chunk_obj.chunk_file}")
 
         # Collect unique_ids for categorized chunks (excluding not_evaluated)
-        evaluated_chunk_ids = [chunk["unique_id"] for chunk in one_evaluation_chunks + two_evaluations_chunks]
+        evaluated_chunk_ids = [chunk["unique_id"] for chunk in one_evaluation_chunks]
 
         # Fetch evaluations done by the current user for those chunks
         user_evaluations = EvaluationResults.objects.filter(
@@ -582,7 +582,7 @@ class EvaluationChunkCategoryView(BaseGenericAPIView):
         user_evaluated_set = set(user_evaluations)
 
         # Append evaluated_by_user boolean to the required categories
-        for chunk in one_evaluation_chunks + two_evaluations_chunks:
+        for chunk in one_evaluation_chunks:
             chunk["evaluated_by_user"] = chunk["unique_id"] in user_evaluated_set
         
         # Append full URL for chunk_file
@@ -592,13 +592,11 @@ class EvaluationChunkCategoryView(BaseGenericAPIView):
         for chunk in one_evaluation_chunks:
             chunk['file_url'] = get_full_url(chunk)
 
-        for chunk in two_evaluations_chunks:
-            chunk['file_url'] = get_full_url(chunk)
-
         return Response({
             "not_evaluated": not_evaluated_chunks,
             "one_evaluation": one_evaluation_chunks,
-            "two_evaluations": two_evaluations_chunks,
+            # Removed "two_evaluations" category since we now only need 2 total evaluations
+            # for transcription eligibility, so we don't need a separate "two evaluations" bucket
         })
 
 # Chunks for Transcription View
@@ -617,44 +615,38 @@ class ChunksForTranscriptionView(APIView):
             except Project.DoesNotExist:
                 return Response({"error": f"Project with ID {project_id} not found"}, status=status.HTTP_404_NOT_FOUND)
         
-        total_choices = 6  # Updated to match new evaluation fields count
+        total_choices = 6  # Total number of boolean fields
 
-        # Subquery to count evaluations and calculate score
+        # Subquery to count evaluations and calculate total boolean flags (true values)
         evaluation_summary = (
             EvaluationResults.objects.filter(audiofilechunk=OuterRef("unique_id"))
             .values("audiofilechunk")
             .annotate(
                 evaluation_count=Count("unique_id"),
+                # Sum of all boolean fields - used to determine if ANY issue was flagged
                 total_boolean_sum=Sum("not_clear", output_field=IntegerField())
                 + Sum("speaker_overlap", output_field=IntegerField())
                 + Sum("dual_speaker", output_field=IntegerField())
                 + Sum("interruptive_background_noise", output_field=IntegerField())
                 + Sum("silence", output_field=IntegerField())
                 + Sum("incomplete_word", output_field=IntegerField()),
-                score=ExpressionWrapper(
-                    (
-                        Sum("not_clear", output_field=IntegerField())
-                        + Sum("speaker_overlap", output_field=IntegerField())
-                        + Sum("dual_speaker", output_field=IntegerField())
-                        + Sum("interruptive_background_noise", output_field=IntegerField())
-                        + Sum("silence", output_field=IntegerField())
-                        + Sum("incomplete_word", output_field=IntegerField())
-                    )
-                    / (Count("unique_id") * total_choices),
-                    output_field=FloatField(),
-                ),
             )
-            .values("evaluation_count", "score")
+            .values("evaluation_count", "total_boolean_sum")
         )
 
-        # Query chunks and annotate with evaluation count & score
+        # Query chunks and annotate with evaluation count & total boolean sum
         chunks = base_queryset.annotate(
             evaluation_count=Subquery(evaluation_summary.values("evaluation_count")),
-            score=Subquery(evaluation_summary.values("score")),
+            total_boolean_sum=Subquery(evaluation_summary.values("total_boolean_sum")),
         )
 
-        # Filter: Chunks with evaluation_count ≥ 3 and score < 0.3
-        chunks_for_transcription = chunks.filter(evaluation_count__gte=3, score__lt=0.3)
+        # NEW LOGIC:
+        # 1. Chunks with evaluation_count ≥ 2 (instead of 3)
+        # 2. Chunks with total_boolean_sum = 0 (no issues flagged)
+        chunks_for_transcription = chunks.filter(
+            evaluation_count__gte=2,  # Changed from 3 to 2
+            total_boolean_sum=0       # Only include chunks with no issues flagged
+        )
         
         # Helper function to get full URL
         def get_full_url(chunk):
@@ -673,7 +665,6 @@ class ChunksForTranscriptionView(APIView):
             "chunks_for_transcription": resultingChunks
         })
 
-
 # Chunk Statistics View
 class ChunkStatisticsView(BaseGenericAPIView):
     serializer_class = ChunkStatisticsSerializer
@@ -685,7 +676,7 @@ class ChunkStatisticsView(BaseGenericAPIView):
         # This already handles the project filtering from request.project
         base_queryset = self.get_queryset()
         
-        total_choices = 6  # Updated to match new evaluation fields count
+        total_choices = 6  # Total number of boolean fields
         
         evaluation_summary = (
             EvaluationResults.objects.filter(audiofilechunk=OuterRef("unique_id"))
@@ -698,25 +689,13 @@ class ChunkStatisticsView(BaseGenericAPIView):
                 + Sum("interruptive_background_noise", output_field=IntegerField())
                 + Sum("silence", output_field=IntegerField())
                 + Sum("incomplete_word", output_field=IntegerField()),
-                score=ExpressionWrapper(
-                    (
-                        Sum("not_clear", output_field=IntegerField())
-                        + Sum("speaker_overlap", output_field=IntegerField())
-                        + Sum("dual_speaker", output_field=IntegerField())
-                        + Sum("interruptive_background_noise", output_field=IntegerField())
-                        + Sum("silence", output_field=IntegerField())
-                        + Sum("incomplete_word", output_field=IntegerField())
-                    )
-                    / (Count("unique_id") * total_choices),
-                    output_field=FloatField(),
-                ),
             )
-            .values("evaluation_count", "score")
+            .values("evaluation_count", "total_boolean_sum")
         )
         
         chunks = base_queryset.annotate(
             evaluation_count=Subquery(evaluation_summary.values("evaluation_count")),
-            score=Subquery(evaluation_summary.values("score")),
+            total_boolean_sum=Subquery(evaluation_summary.values("total_boolean_sum")),
         )
         
         total_chunks = chunks.count()
@@ -724,12 +703,17 @@ class ChunkStatisticsView(BaseGenericAPIView):
         one_evaluation = chunks.filter(evaluation_count=1).count()
         two_evaluations = chunks.filter(evaluation_count=2).count()
         three_or_more_evaluations = chunks.filter(evaluation_count__gte=3).count()
+        
+        # New logic: chunks need 2+ evaluations AND no issues flagged (total_boolean_sum=0)
         ready_for_transcription = chunks.filter(
-            evaluation_count__gte=3, score__lt=0.3
+            evaluation_count__gte=2,     # Changed from 3 to 2
+            total_boolean_sum=0          # No issues flagged
         ).count()
+        
         transcribed_chunks = (
             chunks.exclude(feature_text__isnull=True).exclude(feature_text="").count()
         )
+        
         evaluation_completion_rate = (
             ((total_chunks - not_evaluated) / total_chunks) * 100
             if total_chunks > 0
@@ -747,7 +731,6 @@ class ChunkStatisticsView(BaseGenericAPIView):
             "transcribed_chunks": transcribed_chunks,
         }
         return Response(stats)
-
 # Evaluation Category Statistics View
 class EvaluationCategoryStatisticsView(BaseGenericAPIView):
     serializer_class = EvaluationCategoryStatisticsSerializer
