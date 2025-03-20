@@ -53,3 +53,4 @@ aitrainerS3.code-workspace
 s3/s3/settings/development.py
 s3/shared/
 aitraining_data_backup_2025-03-10.sql
+version1_backup/
