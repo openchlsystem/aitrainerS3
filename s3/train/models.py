@@ -37,7 +37,7 @@ class TrainingSession(BaseModel):
         ("failed", "Failed"),
     ]
 
-    model_name = models.CharField(max_length=100)  # e.g., YOLOv5, Whisper
+    model_name = models.CharField(max_length=100)  # e.g Whisper
     config = models.JSONField()  # Stores the training config as JSON
     status = models.CharField(max_length=10, choices=SESSION_STATUS, default="pending")
 

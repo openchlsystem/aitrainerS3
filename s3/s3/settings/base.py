@@ -43,6 +43,28 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "transcriptions.middleware.ProjectContextMiddleware",
+
+]
+
+# Allow requests from your Vue dev server
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+# Add your custom header to the allowed headers
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-project-id',  # Allow our custom header
 ]
 
 ROOT_URLCONF = "s3.urls"
@@ -92,8 +114,8 @@ STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 # Media files
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+MEDIA_URL = '/shared/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'shared')
 
 # CORS
 CORS_ALLOW_ALL_ORIGINS = True

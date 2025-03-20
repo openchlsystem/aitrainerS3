@@ -1,6 +1,8 @@
 from django.db import models
 import uuid
 from django.conf import settings
+import os
+
 
 
 class BaseModel(models.Model):
@@ -36,46 +38,63 @@ class Project(BaseModel):
         return self.name
 
 
-# Audio file must be downloaded prior
+# Original audio files
 class AudioFile(BaseModel):
     project = models.ForeignKey(
         Project,
-        null=True,
-        blank=True,
         on_delete=models.CASCADE,
         related_name="audio_files",
     )
-    audio_id = models.CharField(max_length=50, unique=True)
-    audio_file = models.FileField(upload_to="audios/")
+    audio_id = models.CharField(max_length=50, unique=False)
+    # Store relative path to the NFS shared folder
+    audio_file = models.FileField(upload_to='raw/')
     file_size = models.PositiveIntegerField(null=True)
     duration = models.FloatField(null=True)
-    is_cleaned = models.BooleanField(default=False)
+    is_processed = models.BooleanField(default=False)
 
     def __str__(self):
         return self.audio_id
+    
+    @property
+    def full_path(self):
+        """Return the full path on the S3 server"""
+        return os.path.join('shared', self.audio_file.name)
+    
+    @property
+    def gpu_path(self):
+        """Return the full path on the GPU server"""
+        # Path for GPU server uses a different mount point (/mnt/shared)
+        return os.path.join('/mnt/shared', self.audio_file.name)
 
 
-# confirm audio files are usable example long silence , volume , within selected specttogram
-class CleanedAudioFile(BaseModel):
+# Preprocessed/cleaned audio files
+class ProcessedAudioFile(BaseModel):
     project = models.ForeignKey(
         Project,
-        null=True,
-        blank=True,
         on_delete=models.CASCADE,
-        related_name="cleaned_audio_files",
+        related_name="processed_audio_files",
     )
-    audio_file = models.FileField(upload_to="cleaned-audio/")
-    is_approved = models.BooleanField(default=False)
-    is_disapproved = models.BooleanField(default=False)
+    # Store relative path to the NFS shared folder
+    processed_file = models.FileField(upload_to='processed/')
     file_size = models.PositiveIntegerField(null=True)
     duration = models.FloatField(null=True)
-
+    is_approved = models.BooleanField(default=False)
+    is_disapproved = models.BooleanField(default=False)
+    
+    @property
+    def full_path(self):
+        """Return the full path on the S3 server"""
+        return os.path.join('shared', self.processed_file.name)
+    
+    @property
+    def gpu_path(self):
+        """Return the full path on the GPU server"""
+        # Path for GPU server uses a different mount point (/mnt/shared)
+        return os.path.join('/mnt/shared', self.processed_file.name)
 
 class CaseRecord(BaseModel):
     project = models.ForeignKey(
         Project,
-        null=True,
-        blank=True,
         on_delete=models.CASCADE,
         related_name="case_records",
     )
@@ -97,31 +116,52 @@ class CaseRecord(BaseModel):
 
     def __str__(self):
         return f"Case {self.case_id} - {self.main_category}"
-
-
-# class EvaluationRecord(BaseModel):
-#     project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.CASCADE, related_name="evaluation_records")
-#     audio_id = models.OneToOneField(AudioFile, on_delete=models.CASCADE, related_name="evaluation_record", null=True, unique=True)
-#     date = models.DateTimeField()
-#     talk_time = models.TimeField()
-#     case_id = models.CharField(max_length=20)
-#     narrative = models.TextField()
-#     plan = models.TextField()
-#     main_category = models.CharField(max_length=100)
-#     sub_category = models.CharField(max_length=100)
-#     gbv = models.BooleanField()
-#     true_transcription = models.TextField()
-#     true_transcription_locale = models.CharField(max_length=50)
-
-
-class AudioFileChunk(BaseModel):
+    
+# Diarized audio files and their metadata
+class DiarizedAudioFile(BaseModel):
     project = models.ForeignKey(
         Project,
-        null=True,
-        blank=True,
+        on_delete=models.CASCADE,
+        related_name="diarized_audio_files",
+    )
+    # Store relative path to the NFS shared folder
+    diarized_file = models.FileField(upload_to='diarized/', max_length=500)
+    # Store the path to the diarization results JSON
+    diarization_result_json_path = models.CharField(max_length=255)
+    file_size = models.PositiveIntegerField(null=True)
+    duration = models.FloatField(null=True)
+    
+    @property
+    def full_path(self):
+        """Return the full path on the S3 server"""
+        return os.path.join('shared', self.diarized_file.name)
+    
+    @property
+    def diarization_json_full_path(self):
+        """Return the full path to the diarization JSON on the S3 server"""
+        return os.path.join('shared', self.diarization_result_json_path)
+    
+    @property
+    def gpu_path(self):
+        """Return the full path on the GPU server"""
+        # Path for GPU server uses a different mount point (/mnt/shared)
+        return os.path.join('/mnt/shared', self.diarized_file.name)
+    
+    @property
+    def diarization_json_gpu_path(self):
+        """Return the full path to the diarization JSON on the GPU server"""
+        return os.path.join('/mnt/shared', self.diarization_result_json_path)
+
+
+# Audio chunks without direct foreign key relationships to promote anonymity
+class AudioChunk(BaseModel):
+    project = models.ForeignKey(
+        Project,
         on_delete=models.CASCADE,
         related_name="audio_chunks",
     )
+    chunk_file = models.FileField(upload_to='chunks/', max_length=500)
+    
     GENDER_CHOICES = [
         ("male", "Male"),
         ("female", "Female"),
@@ -155,31 +195,39 @@ class AudioFileChunk(BaseModel):
         ("RR", "Runyoro-Rutooro"),
     ]
 
-    chunk_file = models.FileField(upload_to="audio-chunks/")
+
     duration = models.FloatField(null=True)
     feature_text = models.TextField(blank=True, null=True)
     gender = models.CharField(max_length=10, choices=GENDER_CHOICES, default="not_sure")
     locale = models.CharField(max_length=5, choices=LOCALE_CHOICES, default="EN")
 
+    
+    @property
+    def full_path(self):
+        """Return the full path on the S3 server"""
+        return os.path.join('shared', self.chunk_file)
+    
+    @property
+    def gpu_path(self):
+        """Return the full path on the GPU server"""
+        # Path for GPU server uses a different mount point (/mnt/shared)
+        return os.path.join('/mnt/shared', self.chunk_file)
 
 class EvaluationResults(BaseModel):
     project = models.ForeignKey(
         Project,
-        null=True,
-        blank=True,
         on_delete=models.CASCADE,
         related_name="evaluation_results",
     )
     audiofilechunk = models.ForeignKey(
-        AudioFileChunk, on_delete=models.CASCADE, related_name="evaluation_results"
+        AudioChunk, on_delete=models.CASCADE, related_name="evaluation_results"
     )
-    dual_speaker = models.BooleanField(default=False)
+    not_clear = models.BooleanField(default=False)
     speaker_overlap = models.BooleanField(default=False)
-    background_noise = models.BooleanField(default=False)
-    prolonged_silence = models.BooleanField(default=False)
-    not_normal_speech_rate = models.BooleanField(default=False)
-    echo_noise = models.BooleanField(default=False)
-    incomplete_sentence = models.BooleanField(default=False)
+    dual_speaker = models.BooleanField(default=False)
+    interruptive_background_noise = models.BooleanField(default=False)
+    silence = models.BooleanField(default=False)
+    incomplete_word = models.BooleanField(default=False)
     evaluation_start = models.DateTimeField(null=True)
     evaluation_end = models.DateTimeField(null=True)
     evaluation_duration = models.TimeField(null=True)
@@ -187,3 +235,34 @@ class EvaluationResults(BaseModel):
 
     class Meta:
         unique_together = ("audiofilechunk", "created_by")
+
+# Asynchronous task tracking
+# class ProcessingTask(BaseModel):
+#     project = models.ForeignKey(
+#         Project,
+#         on_delete=models.CASCADE,
+#         related_name="processing_tasks",
+#     )
+#     TASK_TYPES = [
+#         ('PREPROCESS', 'Audio Preprocessing'),
+#         ('DIARIZE', 'Speaker Diarization'),
+#         ('CHUNK', 'Audio Chunking'),
+#     ]
+    
+#     STATUS_CHOICES = [
+#         ('PENDING', 'Pending'),
+#         ('PROCESSING', 'Processing'),
+#         ('COMPLETED', 'Completed'),
+#         ('FAILED', 'Failed'),
+#     ]
+    
+#     # Store the audio_id as a string reference without direct FK relationship
+#     audio_id = models.CharField(max_length=50)
+#     task_type = models.CharField(max_length=20, choices=TASK_TYPES)
+#     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='PENDING')
+#     error_message = models.TextField(null=True, blank=True)
+#     result_path = models.CharField(max_length=255, null=True, blank=True)
+    
+#     # Add timestamps for tracking task progress
+#     started_at = models.DateTimeField(null=True, blank=True)
+#     completed_at = models.DateTimeField(null=True, blank=True)
