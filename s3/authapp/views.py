@@ -38,53 +38,53 @@ class RequestOTPView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        # Send message to webhook before OTP
-        webhook_url = "https://backend.bitz-itc.com/api/whatsapp/webhook/"
-        webhook_payload = {
-            "object": "whatsapp_business_account",
-            "entry": [
-                {
-                    "id": "101592599705197",
-                    "changes": [
-                        {
-                            "value": {
-                                "messaging_product": "whatsapp",
-                                "metadata": {"phone_number_id": "555567910973933"},
-                                "contacts": [
-                                    {
-                                        "profile": {
-                                            "name": user.first_name or "WhatsApp User"
-                                        },
-                                        "wa_id": whatsapp_number,
-                                    }
-                                ],
-                                "messages": [
-                                    {
-                                        "from": whatsapp_number,
-                                        "id": f"wamid.{random.randint(100000, 999999)}",
-                                        "timestamp": str(int(time.time())),
-                                        "text": {"body": "I am requesting for an OTP"},
-                                        "type": "text",
-                                    }
-                                ],
-                            },
-                            "field": "messages",
-                        }
-                    ],
-                }
-            ],
-        }
+        # # Send message to webhook before OTP
+        # webhook_url = "https://backend.bitz-itc.com/api/whatsapp/webhook/"
+        # webhook_payload = {
+        #     "object": "whatsapp_business_account",
+        #     "entry": [
+        #         {
+        #             "id": "101592599705197",
+        #             "changes": [
+        #                 {
+        #                     "value": {
+        #                         "messaging_product": "whatsapp",
+        #                         "metadata": {"phone_number_id": "555567910973933"},
+        #                         "contacts": [
+        #                             {
+        #                                 "profile": {
+        #                                     "name": user.first_name or "WhatsApp User"
+        #                                 },
+        #                                 "wa_id": whatsapp_number,
+        #                             }
+        #                         ],
+        #                         "messages": [
+        #                             {
+        #                                 "from": whatsapp_number,
+        #                                 "id": f"wamid.{random.randint(100000, 999999)}",
+        #                                 "timestamp": str(int(time.time())),
+        #                                 "text": {"body": "I am requesting for an OTP"},
+        #                                 "type": "text",
+        #                             }
+        #                         ],
+        #                     },
+        #                     "field": "messages",
+        #                 }
+        #             ],
+        #         }
+        #     ],
+        # }
 
-        try:
-            webhook_response = requests.post(
-                webhook_url,
-                json=webhook_payload,
-                headers={"Content-Type": "application/json"},
-            )
-            if webhook_response.status_code != 200:
-                logging.error(f"Failed to notify webhook: {webhook_response.text}")
-        except requests.RequestException as e:
-            logging.error(f"Error sending webhook message: {e}")
+        # try:
+        #     webhook_response = requests.post(
+        #         webhook_url,
+        #         json=webhook_payload,
+        #         headers={"Content-Type": "application/json"},
+        #     )
+        #     if webhook_response.status_code != 200:
+        #         logging.error(f"Failed to notify webhook: {webhook_response.text}")
+        # except requests.RequestException as e:
+        #     logging.error(f"Error sending webhook message: {e}")
 
         # Generate a 6-digit OTP
         otp = str(random.randint(100000, 999999))
@@ -96,11 +96,14 @@ class RequestOTPView(APIView):
         # Send OTP via WhatsApp API
         try:
             response = requests.post(
-                "https://backend.bitz-itc.com/api/whatsapp/whatsapp/send/",
+                "https://backend.bitz-itc.com/api/webhook/whatsapp/",
                 json={
-                    "recipient": whatsapp_number,
-                    "message_type": "text",
-                    "content": otp_message,
+                    "direction": "outgoing",
+                    "data": {
+                        "recipient": whatsapp_number,
+                        "message_type": "text",
+                        "content": otp_message,
+                    },
                 },
                 headers={"Content-Type": "application/json"},
             )
