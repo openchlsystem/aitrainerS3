@@ -1,7 +1,7 @@
 from .base import *
 
 # Production settings
-DEBUG = False
+DEBUG = True
 ALLOWED_HOSTS = ['edms-enpoints.bitz-itc.com', '192.168.8.13']
 
 # Production Database Configuration

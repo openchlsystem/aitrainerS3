@@ -16,6 +16,8 @@ PREPROCESSING_API_URL = f'{GPU_SERVER_BASE_URL}/audio/preprocess/'
 DIARIZING_API_URL = f'{GPU_SERVER_BASE_URL}/audio/diarize/'
 CHUNKING_API_URL = f'{GPU_SERVER_BASE_URL}/audio/chunk/'
 
+FIXED_CHUNKING_API_URL = f'{GPU_SERVER_BASE_URL}/audio/fixed_chunking/'
+
 @receiver(post_save, sender=AudioFile)
 def trigger_audio_preprocessing(sender, instance, created, **kwargs):
     """
@@ -69,33 +71,54 @@ def trigger_audio_preprocessing(sender, instance, created, **kwargs):
             print(f"Error sending preprocessing request for audio {instance.audio_id}: {str(e)}")
 
 @receiver(post_save, sender=ProcessedAudioFile)
-def trigger_diarization(sender, instance, created, **kwargs):
+def trigger_audio_processing(sender, instance, created, **kwargs):
     """
-    Signal to trigger diarization when a ProcessedAudioFile is approved.
-    This signal sends a POST request to the diarization endpoint with the GPU path.
+    Signal to trigger appropriate audio processing when a ProcessedAudioFile is approved.
+    For MANUAL_TRANSCRIPTION workflow: Triggers diarization
+    For ASR_CORRECTION workflow: Triggers fixed-duration chunking and Whisper transcription
     """
-    # Only proceed if the is_approved flag was changed to True
-    # We can detect this by checking if instance.is_approved is True and either:
-    # 1. This is a new instance (created=True) with is_approved=True
-    # 2. This is an existing instance that was updated (created=False)
-    
     # Skip if not approved
     if not instance.is_approved:
         return
     
+    # Get the associated project
+    project = instance.project
+    
     # Get the GPU path of the audio file
     audio_path = instance.gpu_path
     
-    # Prepare the payload for the API request
+    # Common payload fields
     payload = {
         "audio_path": audio_path,
         'project_id': str(instance.project_id),
     }
     
-    # Make the API call to the diarization endpoint
+    # Choose processing path based on workflow type
+    if project.workflow_type == 'MANUAL_TRANSCRIPTION':
+        # Original workflow - trigger diarization
+        process_endpoint = DIARIZING_API_URL
+        print(f"Triggering diarization for {instance.processed_file.name}")
+    
+    elif project.workflow_type == 'ASR_CORRECTION':
+        # New workflow - trigger fixed chunking and ASR
+        process_endpoint = FIXED_CHUNKING_API_URL
+        # Add chunking-specific parameters
+        payload.update({
+            "chunk_duration": project.asr_chunk_duration,  # Duration in seconds
+            "should_transcribe": True,  # Flag to indicate ASR should follow chunking
+            "whisper_model": "turbo",   # Specify Whisper model size
+        })
+        print(f"Triggering fixed chunking and ASR for {instance.processed_file.name}")
+    
+    else:
+        # Unknown workflow type
+        print(f"Unknown workflow type '{project.workflow_type}' for project {project.id}")
+        return
+    
+    # Make the API call to the appropriate endpoint
     try:
         response = requests.post(
-            DIARIZING_API_URL,
+            process_endpoint,
             json=payload,
             headers={"Content-Type": "application/json"}
         )
@@ -103,12 +126,12 @@ def trigger_diarization(sender, instance, created, **kwargs):
         # Check if the request was successful
         response.raise_for_status()
         
-        # Optional: Log the successful response
-        print(f"Diarization triggered for {instance.processed_file.name}. Response: {response.json()}")
+        # Log the successful response
+        print(f"Processing triggered for {instance.processed_file.name}. Response: {response.json()}")
         
     except requests.exceptions.RequestException as e:
         # Handle any errors that occur during the request
-        print(f"Error triggering diarization for {instance.processed_file.name}: {str(e)}")
+        print(f"Error triggering processing for {instance.processed_file.name}: {str(e)}")
         # You might want to log this error or handle it in some other way
         # depending on your application's error handling strategy
 

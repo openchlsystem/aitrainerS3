@@ -9,10 +9,31 @@ class ProjectSerializer(serializers.ModelSerializer):
     created_by = serializers.ReadOnlyField(source='created_by.whatsapp_number')
     updated_by = serializers.ReadOnlyField(source='updated_by.whatsapp_number')
     project = serializers.PrimaryKeyRelatedField(read_only=True)
+    
+    # Add a human-readable representation of the workflow type
+    workflow_type_display = serializers.CharField(source='get_workflow_type_display', read_only=True)
 
     class Meta:
         model = Project
         fields = '__all__'
+        
+    def validate(self, data):
+        """
+        Validate workflow-specific fields based on workflow type
+        """
+        workflow_type = data.get('workflow_type')
+        
+        # If this is the ASR workflow, ensure asr_chunk_duration is set
+        if workflow_type == 'ASR_CORRECTION':
+            # If asr_chunk_duration is not provided, we'll use the default from the model
+            # If it is provided, validate the range
+            if 'asr_chunk_duration' in data and data['asr_chunk_duration'] is not None:
+                if data['asr_chunk_duration'] < 5 or data['asr_chunk_duration'] > 60:
+                    raise serializers.ValidationError({
+                        'asr_chunk_duration': 'Chunk duration must be between 5 and 60 seconds'
+                    })
+        
+        return data
 
 class AudioFileSerializer(serializers.ModelSerializer):
     created_by = serializers.ReadOnlyField(source='created_by.whatsapp_number')

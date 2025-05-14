@@ -106,9 +106,27 @@ class ProjectListCreateView(generics.ListCreateAPIView):
     queryset = Project.objects.all()
     serializer_class = ProjectSerializer
     permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        """
+        Optionally filter projects by workflow_type
+        """
+        queryset = Project.objects.all()
+        workflow_type = self.request.query_params.get('workflow_type')
+        if workflow_type:
+            queryset = queryset.filter(workflow_type=workflow_type)
+        return queryset
 
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user, updated_by=self.request.user)
+        # For ASR workflow, ensure the asr_chunk_duration is set if not provided
+        if serializer.validated_data.get('workflow_type') == 'ASR_CORRECTION' and 'asr_chunk_duration' not in serializer.validated_data:
+            serializer.save(
+                created_by=self.request.user, 
+                updated_by=self.request.user,
+                asr_chunk_duration=30  # Default value
+            )
+        else:
+            serializer.save(created_by=self.request.user, updated_by=self.request.user)
 
 class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
     queryset = Project.objects.all()
@@ -116,7 +134,18 @@ class ProjectDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def perform_update(self, serializer):
-        serializer.save(updated_by=self.request.user)
+        """
+        When updating a project, handle potential workflow type changes
+        """
+        original_instance = self.get_object()
+        original_workflow = original_instance.workflow_type
+        new_workflow = serializer.validated_data.get('workflow_type', original_workflow)
+        
+        # If switching to ASR workflow, ensure asr_chunk_duration is set
+        if new_workflow == 'ASR_CORRECTION' and original_workflow != 'ASR_CORRECTION' and 'asr_chunk_duration' not in serializer.validated_data:
+            serializer.save(updated_by=self.request.user, asr_chunk_duration=30)
+        else:
+            serializer.save(updated_by=self.request.user)
 
 # ✅ AudioFile Views
 class AudioFileListCreateView(BaseListCreateView):
@@ -347,6 +376,8 @@ class AudioChunkListCreateView(BaseListCreateView):
                 audio_chunk = AudioChunk(
                     project=self.request.project,
                     duration=self.request.data.get('duration'),
+                    feature_text=self.request.data.get('feature_text'),
+                    locale=str(self.request.data.get('detected_language')).upper() if self.request.data.get('detected_language') else None,
                     created_by=self.request.user,
                     updated_by=self.request.user,
                     created_at=timezone.now(),

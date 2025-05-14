@@ -33,9 +33,27 @@ class BaseModel(models.Model):
 class Project(BaseModel):
     name = models.CharField(max_length=255, unique=True)
     description = models.TextField(blank=True, null=True)
+    
+    # Add workflow type field
+    WORKFLOW_CHOICES = (
+        ('MANUAL_TRANSCRIPTION', 'Manual Transcription Workflow'),
+        ('ASR_CORRECTION', 'ASR Correction Workflow'),
+    )
+    workflow_type = models.CharField(
+        max_length=50,
+        choices=WORKFLOW_CHOICES,
+        default='MANUAL_TRANSCRIPTION'
+    )
 
+    asr_chunk_duration = models.PositiveIntegerField(
+        default=30,  # Default 30 seconds
+        help_text="Chunk duration in seconds for ASR workflow",
+        null=True,
+        blank=True  # Make it optional
+    )
+    
     def __str__(self):
-        return self.name
+        return f"{self.name} - {self.workflow_type}"
 
 
 # Original audio files
