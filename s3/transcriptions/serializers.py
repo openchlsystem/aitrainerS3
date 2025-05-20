@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from .models import (
-    AudioFile, ProcessedAudioFile, CaseRecord, DiarizedAudioFile, 
-    AudioChunk, EvaluationResults, Project
+    AudioFile, ChunkTranscription, ProcessedAudioFile, CaseRecord, DiarizedAudioFile, 
+    AudioChunk, EvaluationResults, Project, ReviewQueue, TranscriptionRevision, TranscriptionStatus, UserStats, WorkSession
 )
 from django.db.models import Count, Sum, IntegerField, ExpressionWrapper, FloatField
 
@@ -236,3 +236,53 @@ class EvaluationCategoryStatisticsSerializer(serializers.Serializer):
             'incomplete_word_count': queryset.filter(incomplete_word=True).count(),
             'total_evaluated_chunks': queryset.count()
         }
+    
+# New serializers for enhanced workflow models
+class TranscriptionStatusSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = TranscriptionStatus
+        fields = '__all__'
+
+class ChunkTranscriptionSerializer(serializers.ModelSerializer):
+    status_name = serializers.ReadOnlyField(source='status.name')
+    transcriber_name = serializers.ReadOnlyField(source='transcriber.first_name')
+    reviewer_name = serializers.ReadOnlyField(source='reviewer.first_name')
+    
+    class Meta:
+        model = ChunkTranscription
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+class TranscriptionRevisionSerializer(serializers.ModelSerializer):
+    previous_status_name = serializers.ReadOnlyField(source='previous_status.name')
+    new_status_name = serializers.ReadOnlyField(source='new_status.name')
+    
+    class Meta:
+        model = TranscriptionRevision
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+class WorkSessionSerializer(serializers.ModelSerializer):
+    user_name = serializers.ReadOnlyField(source='user.first_name')
+    
+    class Meta:
+        model = WorkSession
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+class ReviewQueueSerializer(serializers.ModelSerializer):
+    transcription_text = serializers.ReadOnlyField(source='transcription.text')
+    chunk_id = serializers.ReadOnlyField(source='transcription.audio_chunk.unique_id')
+    
+    class Meta:
+        model = ReviewQueue
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']
+
+class EnhancedUserStatsSerializer(serializers.ModelSerializer):
+    user_name = serializers.ReadOnlyField(source='user.first_name')
+    
+    class Meta:
+        model = UserStats
+        fields = '__all__'
+        read_only_fields = ['created_at', 'updated_at']

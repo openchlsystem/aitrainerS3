@@ -1,7 +1,7 @@
 from django.urls import path
 from .views import (
     # Project views
-    ProcessedAudioFileToggleApprovedView, ProcessedAudioFileToggleDisapprovedView, ProjectListCreateView, ProjectDetailView,
+    ChunkTranscriptionDetailView, ChunkTranscriptionListCreateView, CompleteReviewView, GetChunkForTranscriptionView, GetItemForReviewView, ProcessedAudioFileToggleApprovedView, ProcessedAudioFileToggleDisapprovedView, ProjectListCreateView, ProjectDetailView,
     
     # Audio file views
     AudioFileListCreateView, AudioFileDetailView,
@@ -32,7 +32,7 @@ from .views import (
     ChunksForTranscriptionView, LeaderboardView,
     
     # File upload view
-    AudioFilesBulkUploadView
+    AudioFilesBulkUploadView, ReviewQueueDetailView, ReviewQueueListView, TranscriptionStatusDetailView, TranscriptionStatusListView, UpdateTranscriptionView, UserStatsDetailView, UserStatsListView, WorkSessionDetailView, WorkSessionListCreateView
 )
 
 urlpatterns = [
@@ -83,4 +83,32 @@ urlpatterns = [
     
     # File upload
     path('upload/audio/', AudioFilesBulkUploadView.as_view(), name='audio-bulk-upload'),
+
+    # Add to your existing urls.py
+
+    # TranscriptionStatus urls
+    path('transcription-statuses/', TranscriptionStatusListView.as_view(), name='transcription-status-list'),
+    path('transcription-statuses/<uuid:pk>/', TranscriptionStatusDetailView.as_view(), name='transcription-status-detail'),
+
+    # ChunkTranscription urls
+    path('chunk-transcriptions/', ChunkTranscriptionListCreateView.as_view(), name='chunk-transcription-list'),
+    path('chunk-transcriptions/<uuid:pk>/', ChunkTranscriptionDetailView.as_view(), name='chunk-transcription-detail'),
+
+    # WorkSession urls
+    path('work-sessions/', WorkSessionListCreateView.as_view(), name='work-session-list'),
+    path('work-sessions/<uuid:pk>/', WorkSessionDetailView.as_view(), name='work-session-detail'),
+
+    # ReviewQueue urls
+    path('review-queue/', ReviewQueueListView.as_view(), name='review-queue-list'),
+    path('review-queue/<uuid:pk>/', ReviewQueueDetailView.as_view(), name='review-queue-detail'),
+
+    # UserStats urls
+    path('user-stats/', UserStatsListView.as_view(), name='user-stats-list'),
+    path('user-stats/<uuid:pk>/', UserStatsDetailView.as_view(), name='user-stats-detail'),
+
+    # Workflow endpoints
+    path('transcription/get-chunk/', GetChunkForTranscriptionView.as_view(), name='get-chunk-for-transcription'),
+    path('transcription/update/<uuid:chunk_id>/', UpdateTranscriptionView.as_view(), name='update-transcription'),
+    path('review/get-item/', GetItemForReviewView.as_view(), name='get-item-for-review'),
+    path('review/complete/<uuid:review_id>/', CompleteReviewView.as_view(), name='complete-review'),
 ]

@@ -1,9 +1,12 @@
+import datetime
 import json
 import os
 import logging
 import subprocess
+from time import timezone
 from rest_framework import generics, permissions, status, serializers
 from .models import (
+    ChunkTranscription,
     Project,
     AudioFile,
     ProcessedAudioFile,
@@ -11,10 +14,17 @@ from .models import (
     CaseRecord,
     AudioChunk,
     EvaluationResults,
+    ReviewQueue,
+    TranscriptionRevision,
+    TranscriptionStatus,
+    UserStats,
+    WorkSession,
 )
 from .serializers import (
     AudioFileSerializer,
     ChunkStatisticsSerializer,
+    ChunkTranscriptionSerializer,
+    EnhancedUserStatsSerializer,
     ProcessedAudioFileSerializer,
     DiarizedAudioFileSerializer,
     CaseRecordSerializer,
@@ -24,7 +34,11 @@ from .serializers import (
     EvaluationResultsSerializer,
     EvaluationResultsLeaderBoardSerializer,
     EvaluationResultsSummarySerializer,
-    ProjectSerializer
+    ProjectSerializer,
+    ReviewQueueSerializer,
+    TranscriptionRevisionSerializer,
+    TranscriptionStatusSerializer,
+    WorkSessionSerializer
 )
 from rest_framework.response import Response
 from django.http import JsonResponse
@@ -43,6 +57,10 @@ from django.db.models import (
 )
 from rest_framework.views import APIView
 from rest_framework.parsers import MultiPartParser, FormParser
+
+from django.db import transaction
+
+from s3.transcriptions import models
 
 logger = logging.getLogger(__name__)
 
@@ -653,15 +671,26 @@ class ChunksForTranscriptionView(APIView):
         
         # Check workflow type and handle accordingly
         if project.workflow_type == 'ASR_CORRECTION':
-            # Use logic similar to AudioChunkListCreateView for ASR workflow
+            # ASR workflow
             return self._handle_asr_workflow(request, project)
         else:
             # Default manual transcription workflow
             return self._handle_manual_workflow(request, project)
     
     def _handle_manual_workflow(self, request, project):
-        # Original logic for manual transcription
+        # Updated logic for manual transcription with new workflow
         base_queryset = AudioChunk.objects.filter(project=project)
+        
+        # Filter out chunks that already have transcriptions in progress or completed
+        available_chunks = base_queryset.filter(
+            # Not assigned to anyone
+            is_assigned=False
+        ).exclude(
+            # Exclude chunks that have transcriptions with status other than REJECTED
+            # (This means DRAFT, PENDING_REVIEW, APPROVED are all excluded)
+            models.Q(current_transcription__isnull=False) & 
+            ~models.Q(current_transcription__status__name='REJECTED')
+        )
         
         total_choices = 6  # Total number of boolean fields
 
@@ -683,7 +712,7 @@ class ChunksForTranscriptionView(APIView):
         )
 
         # Query chunks and annotate with evaluation count & total boolean sum
-        chunks = base_queryset.annotate(
+        chunks = available_chunks.annotate(
             evaluation_count=Subquery(evaluation_summary.values("evaluation_count")),
             total_boolean_sum=Subquery(evaluation_summary.values("total_boolean_sum")),
         )
@@ -698,42 +727,69 @@ class ChunksForTranscriptionView(APIView):
         def get_full_url(chunk):
             return request.build_absolute_uri(f"/shared/{chunk.chunk_file}")
         
-        # Serialize chunks
-        resultingChunks = AudioChunkSerializer(
-            chunks_for_transcription, many=True
-        ).data
+        # Serialize chunks - include both regular data and transcription data
+        resultingChunks = []
         
-        # Append full URL for chunk_file
-        for chunk in resultingChunks:
-            chunk['file_url'] = get_full_url(AudioChunk.objects.get(unique_id=chunk['unique_id']))
+        for chunk in chunks_for_transcription:
+            # Serialize the chunk
+            chunk_data = AudioChunkSerializer(chunk).data
+            
+            # Add the file URL
+            chunk_data['file_url'] = get_full_url(chunk)
+            
+            # Check if there's a rejected transcription to include
+            try:
+                transcription = ChunkTranscription.objects.filter(
+                    audio_chunk=chunk,
+                    status__name='REJECTED'
+                ).first()
+                
+                if transcription:
+                    chunk_data['transcription'] = ChunkTranscriptionSerializer(transcription).data
+                    chunk_data['previous_text'] = transcription.text
+            except:
+                pass
+                
+            resultingChunks.append(chunk_data)
 
         return Response({
             "chunks_for_transcription": resultingChunks
         })
     
     def _handle_asr_workflow(self, request, project):
-        # Logic for ASR correction workflow
-        # This should mimic or reuse the logic from AudioChunkListCreateView
+        # Updated logic for ASR correction workflow
         
-        # Get all chunks for this project
-        chunks = AudioChunk.objects.filter(project=project)
-        
-        # For ASR workflow, we don't need evaluation requirements
-        # We can directly use all chunks that have been ASR processed
-        
-        # You may need to add a field to AudioChunk to track ASR processing status
-        # For now, assuming all chunks in an ASR project are eligible
+        # Get chunks that have ASR-generated transcriptions in DRAFT status
+        chunks = AudioChunk.objects.filter(
+            project=project,
+            is_assigned=False,
+            current_transcription__is_asr_generated=True,
+            current_transcription__status__name='DRAFT'
+        )
         
         # Helper function to get full URL
         def get_full_url(chunk):
             return request.build_absolute_uri(f"/shared/{chunk.chunk_file}")
         
-        # Serialize chunks
-        resultingChunks = AudioChunkSerializer(chunks, many=True).data
+        # Serialize chunks including transcription data
+        resultingChunks = []
         
-        # Append full URL for chunk_file
-        for chunk in resultingChunks:
-            chunk['file_url'] = get_full_url(AudioChunk.objects.get(unique_id=chunk['unique_id']))
+        for chunk in chunks:
+            # Serialize the chunk
+            chunk_data = AudioChunkSerializer(chunk).data
+            
+            # Add the file URL
+            chunk_data['file_url'] = get_full_url(chunk)
+            
+            # Include the ASR transcription
+            try:
+                transcription = chunk.current_transcription
+                chunk_data['transcription'] = ChunkTranscriptionSerializer(transcription).data
+                chunk_data['asr_text'] = transcription.text
+            except:
+                pass
+                
+            resultingChunks.append(chunk_data)
         
         return Response({
             "chunks_for_transcription": resultingChunks
@@ -1004,3 +1060,517 @@ class AudioFilesBulkUploadView(BaseGenericAPIView):
         except Exception as e:
             logger.error(f"Error extracting metadata for {filepath}: {e}")
             return None, None
+        
+# TranscriptionStatus views
+class TranscriptionStatusListView(BaseListCreateView):
+    queryset = TranscriptionStatus.objects.all()
+    serializer_class = TranscriptionStatusSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+class TranscriptionStatusDetailView(BaseRetrieveUpdateDestroyView):
+    queryset = TranscriptionStatus.objects.all()
+    serializer_class = TranscriptionStatusSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+# ChunkTranscription views
+class ChunkTranscriptionListCreateView(BaseListCreateView):
+    queryset = ChunkTranscription.objects.all()
+    serializer_class = ChunkTranscriptionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filter by status if provided
+        status_name = self.request.query_params.get('status')
+        if status_name:
+            queryset = queryset.filter(status__name=status_name)
+            
+        # Filter by transcriber
+        transcriber_id = self.request.query_params.get('transcriber')
+        if transcriber_id:
+            queryset = queryset.filter(transcriber__unique_id=transcriber_id)
+            
+        # Filter by reviewer
+        reviewer_id = self.request.query_params.get('reviewer')
+        if reviewer_id:
+            queryset = queryset.filter(reviewer__unique_id=reviewer_id)
+            
+        # Filter by ASR generation
+        is_asr = self.request.query_params.get('is_asr_generated')
+        if is_asr is not None:
+            is_asr_bool = is_asr.lower() == 'true'
+            queryset = queryset.filter(is_asr_generated=is_asr_bool)
+            
+        return queryset
+
+class ChunkTranscriptionDetailView(BaseRetrieveUpdateDestroyView):
+    queryset = ChunkTranscription.objects.all()
+    serializer_class = ChunkTranscriptionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+# WorkSession views
+class WorkSessionListCreateView(BaseListCreateView):
+    queryset = WorkSession.objects.all()
+    serializer_class = WorkSessionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filter by user
+        user_id = self.request.query_params.get('user')
+        if user_id:
+            queryset = queryset.filter(user__unique_id=user_id)
+            
+        # Filter by session type
+        session_type = self.request.query_params.get('session_type')
+        if session_type:
+            queryset = queryset.filter(session_type=session_type)
+            
+        # Filter by date range
+        start_date = self.request.query_params.get('start_date')
+        end_date = self.request.query_params.get('end_date')
+        if start_date:
+            queryset = queryset.filter(start_time__gte=start_date)
+        if end_date:
+            queryset = queryset.filter(end_time__lte=end_date)
+            
+        return queryset
+
+class WorkSessionDetailView(BaseRetrieveUpdateDestroyView):
+    queryset = WorkSession.objects.all()
+    serializer_class = WorkSessionSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def patch(self, request, *args, **kwargs):
+        """Special method to close a work session"""
+        session = self.get_object()
+        
+        if 'close_session' in request.data and request.data['close_session']:
+            session.close_session()
+            
+        return super().patch(request, *args, **kwargs)
+
+# Review Queue views
+class ReviewQueueListView(BaseListAPIView):
+    queryset = ReviewQueue.objects.all()
+    serializer_class = ReviewQueueSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Filter by assigned status
+        is_assigned = self.request.query_params.get('is_assigned')
+        if is_assigned is not None:
+            is_assigned_bool = is_assigned.lower() == 'true'
+            queryset = queryset.filter(is_assigned=is_assigned_bool)
+            
+        # Filter by priority
+        min_priority = self.request.query_params.get('min_priority')
+        if min_priority:
+            queryset = queryset.filter(priority__gte=int(min_priority))
+            
+        return queryset
+
+class ReviewQueueDetailView(BaseRetrieveUpdateDestroyView):
+    queryset = ReviewQueue.objects.all()
+    serializer_class = ReviewQueueSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+# Enhanced User Stats views
+class UserStatsListView(BaseListAPIView):
+    queryset = UserStats.objects.all()
+    serializer_class = EnhancedUserStatsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        
+        # Sort by field
+        sort_by = self.request.query_params.get('sort_by', 'transcriptions_created')
+        direction = self.request.query_params.get('direction', 'desc')
+        
+        if direction == 'desc':
+            sort_by = f'-{sort_by}'
+            
+        return queryset.order_by(sort_by)
+
+class UserStatsDetailView(BaseRetrieveUpdateDestroyView):
+    queryset = UserStats.objects.all()
+    serializer_class = EnhancedUserStatsSerializer
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def patch(self, request, *args, **kwargs):
+        """Special method to update counts and metrics"""
+        user_stats = self.get_object()
+        
+        if 'update_counts' in request.data and request.data['update_counts']:
+            user_stats.update_counts()
+            
+        if 'update_metrics' in request.data and request.data['update_metrics']:
+            user_stats.update_quality_metrics()
+            
+        return super().patch(request, *args, **kwargs)
+
+
+
+# Get next chunk for transcription
+class GetChunkForTranscriptionView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """Assign a chunk to the current user for transcription"""
+        # Get project from request
+        if not hasattr(request, 'project') or not request.project:
+            return Response({"error": "Project ID header (x-project-id) is required"}, 
+                           status=status.HTTP_400_BAD_REQUEST)
+        
+        project = request.project
+        user = request.user
+        
+        with transaction.atomic():
+            # Check workflow type and handle differently based on that
+            if project.workflow_type == 'ASR_CORRECTION':
+                # For ASR workflow, find chunks with ASR-generated transcriptions
+                chunks = AudioChunk.objects.filter(
+                    project=project,
+                    is_assigned=False,
+                    current_transcription__is_asr_generated=True,
+                    current_transcription__status__name='DRAFT'
+                ).order_by('?')[:1]
+            else:
+                # For manual workflow, find chunks ready for transcription based on evaluations
+                # and without any existing transcription
+                chunks = AudioChunk.objects.filter(
+                    project=project,
+                    is_assigned=False
+                ).exclude(
+                    current_transcription__isnull=False
+                ).annotate(
+                    evaluation_count=Count('evaluation_results')
+                ).filter(
+                    evaluation_count__gte=2
+                ).order_by('?')[:1]
+            
+            if not chunks.exists():
+                return Response({"message": "No chunks available for transcription"},
+                               status=status.HTTP_404_NOT_FOUND)
+            
+            chunk = chunks.first()
+            
+            # Assign the chunk to the user
+            chunk.assign_to_user(user)
+            
+            # Start a work session
+            session = WorkSession.objects.create(
+                user=user,
+                session_type='TRANSCRIPTION',
+                start_time=timezone.now(),
+                created_by=user,
+                updated_by=user
+            )
+            
+            # Create a transcription if it doesn't exist
+            draft_status = TranscriptionStatus.objects.get(name='DRAFT')
+            
+            # Check if the chunk already has a transcription (e.g., ASR generated)
+            try:
+                transcription = ChunkTranscription.objects.get(audio_chunk=chunk)
+                # Update transcriber if needed
+                if not transcription.transcriber:
+                    transcription.transcriber = user
+                    transcription.save(update_fields=['transcriber', 'updated_by'])
+            except ChunkTranscription.DoesNotExist:
+                # Create a new transcription record
+                transcription = ChunkTranscription.objects.create(
+                    audio_chunk=chunk,
+                    text=chunk.feature_text or '',  # Use existing feature_text if any
+                    status=draft_status,
+                    transcriber=user,
+                    is_asr_generated=False,
+                    created_by=user,
+                    updated_by=user
+                )
+            
+            # Return the chunk, transcription, and session in response
+            return Response({
+                "chunk": AudioChunkSerializer(chunk).data,
+                "transcription": ChunkTranscriptionSerializer(transcription).data,
+                "session": WorkSessionSerializer(session).data,
+                "file_url": request.build_absolute_uri(f"/shared/{chunk.chunk_file}")
+            }, status=status.HTTP_200_OK)
+
+# Update transcription
+class UpdateTranscriptionView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, chunk_id):
+        """Update a transcription for a specific chunk"""
+        # Get user and project
+        user = request.user
+        
+        # Get chunk and verify assignment
+        try:
+            chunk = AudioChunk.objects.get(unique_id=chunk_id)
+        except AudioChunk.DoesNotExist:
+            return Response({"error": "Chunk not found"}, 
+                           status=status.HTTP_404_NOT_FOUND)
+        
+        if chunk.assigned_to != user:
+            return Response({"error": "This chunk is not assigned to you"}, 
+                           status=status.HTTP_403_FORBIDDEN)
+        
+        # Get the transcription
+        try:
+            transcription = ChunkTranscription.objects.get(audio_chunk=chunk)
+        except ChunkTranscription.DoesNotExist:
+            return Response({"error": "Transcription not found"}, 
+                           status=status.HTTP_404_NOT_FOUND)
+        
+        # Get request data
+        new_text = request.data.get('text', '')
+        submit_for_review = request.data.get('submit_for_review', False)
+        session_id = request.data.get('session_id')
+        
+        # Track previous state for revision history
+        previous_text = transcription.text
+        previous_status = transcription.status
+        
+        with transaction.atomic():
+            # Update text
+            transcription.text = new_text
+            transcription.updated_by = user
+            
+            # Also update feature_text for compatibility during transition
+            chunk.feature_text = new_text
+            chunk.updated_by = user
+            chunk.save(update_fields=['feature_text', 'updated_by'])
+            
+            # Create revision entry
+            revision = None
+            
+            # If submitting for review, change status
+            if submit_for_review:
+                pending_status = TranscriptionStatus.objects.get(name='PENDING_REVIEW')
+                transcription.status = pending_status
+                transcription.save(update_fields=['text', 'status', 'updated_by'])
+                
+                # Add to review queue
+                ReviewQueue.objects.create(
+                    transcription=transcription,
+                    priority=5,  # Default priority
+                    created_by=user,
+                    updated_by=user
+                )
+                
+                # Create revision with status change
+                revision = TranscriptionRevision.objects.create(
+                    transcription=transcription,
+                    previous_text=previous_text,
+                    new_text=new_text,
+                    previous_status=previous_status,
+                    new_status=pending_status,
+                    created_by=user,
+                    updated_by=user
+                )
+                
+                # Release the chunk assignment
+                chunk.release_assignment()
+                
+                # Close the work session if provided
+                if session_id:
+                    try:
+                        session = WorkSession.objects.get(unique_id=session_id)
+                        session.close_session()
+                        session.chunks_processed += 1
+                        session.save(update_fields=['end_time', 'duration', 'chunks_processed'])
+                    except WorkSession.DoesNotExist:
+                        pass
+            else:
+                # Just saving without status change
+                transcription.save(update_fields=['text', 'updated_by'])
+                
+                # Create revision for text change only if text changed
+                if previous_text != new_text:
+                    revision = TranscriptionRevision.objects.create(
+                        transcription=transcription,
+                        previous_text=previous_text,
+                        new_text=new_text,
+                        previous_status=previous_status,
+                        new_status=previous_status,  # Same status, just text change
+                        created_by=user,
+                        updated_by=user
+                    )
+            
+            return Response({
+                "transcription": ChunkTranscriptionSerializer(transcription).data,
+                "revision": TranscriptionRevisionSerializer(revision).data if revision else None,
+                "submitted_for_review": submit_for_review
+            }, status=status.HTTP_200_OK)
+
+# Get next item for review
+class GetItemForReviewView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def get(self, request):
+        """Assign a transcription to the current user for review"""
+        # Get project from request
+        if not hasattr(request, 'project') or not request.project:
+            return Response({"error": "Project ID header (x-project-id) is required"}, 
+                           status=status.HTTP_400_BAD_REQUEST)
+        
+        project = request.project
+        user = request.user
+        
+        with transaction.atomic():
+            # Find an unassigned item in the review queue for this project
+            # that wasn't transcribed by this user
+            pending_status = TranscriptionStatus.objects.get(name='PENDING_REVIEW')
+            
+            review_items = ReviewQueue.objects.filter(
+                is_assigned=False,
+                transcription__audio_chunk__project=project,
+                transcription__status=pending_status
+            ).exclude(
+                transcription__transcriber=user  # Exclude items transcribed by this user
+            ).order_by('-priority', 'created_at')[:1]
+            
+            if not review_items.exists():
+                return Response({"message": "No items available for review"},
+                               status=status.HTTP_404_NOT_FOUND)
+            
+            review_item = review_items.first()
+            
+            # Assign to this reviewer
+            review_item.is_assigned = True
+            review_item.assigned_to = user
+            review_item.assignment_expires_at = timezone.now() + datetime.timedelta(minutes=30)
+            review_item.updated_by = user
+            review_item.save()
+            
+            # Start a work session
+            session = WorkSession.objects.create(
+                user=user,
+                session_type='REVIEW',
+                start_time=timezone.now(),
+                created_by=user,
+                updated_by=user
+            )
+            
+            # Get the transcription and chunk
+            transcription = review_item.transcription
+            chunk = transcription.audio_chunk
+            
+            # Return the review item, transcription, chunk, and session
+            return Response({
+                "review_item": ReviewQueueSerializer(review_item).data,
+                "transcription": ChunkTranscriptionSerializer(transcription).data,
+                "chunk": AudioChunkSerializer(chunk).data,
+                "session": WorkSessionSerializer(session).data,
+                "file_url": request.build_absolute_uri(f"/shared/{chunk.chunk_file}")
+            }, status=status.HTTP_200_OK)
+
+# Complete a review
+class CompleteReviewView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+    
+    def post(self, request, review_id):
+        """Complete a review with approve/reject decision"""
+        # Get user
+        user = request.user
+        
+        # Get review item
+        try:
+            review_item = ReviewQueue.objects.get(unique_id=review_id)
+        except ReviewQueue.DoesNotExist:
+            return Response({"error": "Review item not found"}, 
+                           status=status.HTTP_404_NOT_FOUND)
+        
+        # Verify assignment
+        if review_item.assigned_to != user:
+            return Response({"error": "This review is not assigned to you"}, 
+                           status=status.HTTP_403_FORBIDDEN)
+        
+        # Get request data
+        action = request.data.get('action')  # 'APPROVED', 'REJECTED', or 'NEEDS_CORRECTION'
+        text = request.data.get('text', '')  # Possibly edited text
+        feedback = request.data.get('feedback', '')
+        session_id = request.data.get('session_id')
+        
+        if action not in ['APPROVED', 'REJECTED', 'NEEDS_CORRECTION']:
+            return Response({"error": "Invalid action. Must be APPROVED, REJECTED, or NEEDS_CORRECTION"}, 
+                           status=status.HTTP_400_BAD_REQUEST)
+        
+        # Get transcription
+        transcription = review_item.transcription
+        previous_text = transcription.text
+        previous_status = transcription.status
+        
+        with transaction.atomic():
+            # Get the new status
+            new_status = TranscriptionStatus.objects.get(name=action)
+            
+            # Update transcription
+            transcription.text = text
+            transcription.status = new_status
+            transcription.reviewer = user
+            transcription.updated_by = user
+            transcription.save()
+            
+            # Also update feature_text for compatibility during transition
+            chunk = transcription.audio_chunk
+            chunk.feature_text = text
+            chunk.updated_by = user
+            chunk.save(update_fields=['feature_text', 'updated_by'])
+            
+            # Create revision
+            revision = TranscriptionRevision.objects.create(
+                transcription=transcription,
+                previous_text=previous_text,
+                new_text=text,
+                previous_status=previous_status,
+                new_status=new_status,
+                change_reason=feedback,
+                created_by=user,
+                updated_by=user
+            )
+            
+            # Remove from review queue
+            review_item.delete()
+            
+            # If needs correction, reassign to original transcriber
+            if action == 'NEEDS_CORRECTION':
+                chunk.assign_to_user(transcription.transcriber)
+            
+            # Close the work session if provided
+            if session_id:
+                try:
+                    session = WorkSession.objects.get(unique_id=session_id)
+                    session.close_session()
+                    session.chunks_processed += 1
+                    session.save(update_fields=['end_time', 'duration', 'chunks_processed'])
+                except WorkSession.DoesNotExist:
+                    pass
+            
+            # Update user stats
+            try:
+                user_stats = UserStats.objects.get(user=user)
+                user_stats.update_counts()
+                user_stats.update_quality_metrics()
+            except UserStats.DoesNotExist:
+                pass
+            
+            try:
+                transcriber_stats = UserStats.objects.get(user=transcription.transcriber)
+                transcriber_stats.update_counts()
+                transcriber_stats.update_quality_metrics()
+            except UserStats.DoesNotExist:
+                pass
+            
+            return Response({
+                "transcription": ChunkTranscriptionSerializer(transcription).data,
+                "revision": TranscriptionRevisionSerializer(revision).data,
+                "action": action
+            }, status=status.HTTP_200_OK)
