@@ -254,6 +254,54 @@ class EvaluationResults(BaseModel):
     class Meta:
         unique_together = ("audiofilechunk", "created_by")
 
+
+class TranscriptionActivity(BaseModel):
+    audio_chunk = models.ForeignKey(
+        AudioChunk, 
+        on_delete=models.CASCADE,
+        related_name="transcription_activities",
+    )
+    original_text = models.TextField(blank=True, null=True)
+    new_text = models.TextField(blank=True, null=True)
+    
+    class Meta:
+        unique_together = ("audio_chunk", "created_by")
+        indexes = [
+            models.Index(fields=['created_by', 'created_at']),
+        ]
+        
+    def __str__(self):
+        username = self.created_by.username if self.created_by else "Unknown"
+        return f"Transcription by {username} on {self.created_at}"
+    
+
+class UserStats(BaseModel):
+    user = models.OneToOneField(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="stats",
+    )
+    transcription_count = models.PositiveIntegerField(default=0)
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['transcription_count']),  # For efficient leaderboard queries
+        ]
+        
+    def update_count(self):
+        """Update the transcription count for this user"""
+        self.transcription_count = TranscriptionActivity.objects.filter(created_by=self.user).count()
+        self.save()
+    
+    @property
+    def last_transcription_date(self):
+        """Get the last transcription date on-demand"""
+        latest = TranscriptionActivity.objects.filter(created_by=self.user).order_by('-created_at').first()
+        return latest.created_at if latest else None
+        
+    def __str__(self):
+        return f"{self.user.username} - {self.transcription_count} transcriptions"
+
 # Asynchronous task tracking
 # class ProcessingTask(BaseModel):
 #     project = models.ForeignKey(

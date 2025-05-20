@@ -1,10 +1,11 @@
 import logging
+from django.db import IntegrityError
 import requests
-from django.db.models.signals import post_save
+from django.db.models.signals import pre_save, post_save
 from django.dispatch import receiver
 from django.conf import settings
 
-from .models import AudioFile, DiarizedAudioFile, ProcessedAudioFile
+from .models import AudioChunk, AudioFile, DiarizedAudioFile, ProcessedAudioFile, TranscriptionActivity, UserStats
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -184,3 +185,88 @@ def trigger_chunking(sender, instance, created, **kwargs):
                 logger.error(f"Error details: {error_details}")
             except ValueError:
                 logger.error(f"Error response (non-JSON): {e.response.text}")
+
+# Create a global dictionary to store original values
+# This is more reliable than using instance attributes which may not persist between signals
+_original_values = {}
+
+@receiver(pre_save, sender=AudioChunk)
+def store_original_feature_text(sender, instance, **kwargs):
+    """Store the original feature_text value before save"""
+    if instance.pk:
+        try:
+            # Get the existing instance from the database
+            original = AudioChunk.objects.get(pk=instance.pk)
+            # Store the original text in our global dictionary using the instance pk as key
+            _original_values[str(instance.pk)] = original.feature_text
+        except AudioChunk.DoesNotExist:
+            # If this is a new instance (shouldn't happen in pre_save, but just in case)
+            _original_values[str(instance.pk)] = None
+    else:
+        # For new instances
+        _original_values[str(instance.unique_id)] = None
+
+
+@receiver(post_save, sender=AudioChunk)
+def track_transcription_activity(sender, instance, **kwargs):
+    """
+    Create or update transcription activity and update user stats when 
+    feature_text is populated or updated
+    """
+    # Get the current user (needs to be set before saving the AudioChunk)
+    user = getattr(instance, '_current_user', None) or instance.updated_by
+    
+    if not user:
+        return
+    
+    # Get the original text from our global dictionary
+    instance_key = str(instance.pk)
+    original_text = _original_values.get(instance_key)
+    
+    # Clean up our dictionary to prevent memory leaks
+    if instance_key in _original_values:
+        del _original_values[instance_key]
+    
+    current_text = instance.feature_text
+    
+    # If there's no change in the text, do nothing
+    if original_text == current_text:
+        return
+    
+    # Print debug info (you can remove this in production)
+    print(f"Original text: {original_text}")
+    print(f"Current text: {current_text}")
+        
+    # Only count as a transcription if the text field was actually populated
+    if current_text and current_text.strip():
+        # Try to find an existing activity for this user and chunk
+        activity, created = TranscriptionActivity.objects.get_or_create(
+            created_by=user,
+            audio_chunk=instance,
+            defaults={
+                'updated_by': user,
+                'original_text': original_text,
+                'new_text': current_text
+            }
+        )
+        
+        # If an activity already existed, update it
+        if not created:
+            # If this is the first update, store the original text
+            if activity.original_text is None:
+                activity.original_text = original_text
+            
+            # Always update the new text
+            activity.new_text = current_text
+            activity.updated_by = user
+            activity.save()
+        
+        # Update user stats
+        stats, created = UserStats.objects.get_or_create(
+            user=user,
+            defaults={
+                'created_by': user,
+                'updated_by': user
+            }
+        )
+        stats.update_count()

@@ -637,14 +637,31 @@ class ChunksForTranscriptionView(APIView):
     def get(self, request, *args, **kwargs):
         # Get project_id from request if provided
         project_id = request.query_params.get('project_id')
-        base_queryset = AudioChunk.objects.all()
         
+        # Get project either from query param or request
+        project = None
         if project_id:
             try:
                 project = Project.objects.get(unique_id=project_id)
-                base_queryset = base_queryset.filter(project=project)
             except Project.DoesNotExist:
                 return Response({"error": f"Project with ID {project_id} not found"}, status=status.HTTP_404_NOT_FOUND)
+        elif hasattr(request, 'project') and request.project:
+            project = request.project
+        
+        if not project:
+            return Response({"error": "Project is required"}, status=status.HTTP_400_BAD_REQUEST)
+        
+        # Check workflow type and handle accordingly
+        if project.workflow_type == 'ASR_CORRECTION':
+            # Use logic similar to AudioChunkListCreateView for ASR workflow
+            return self._handle_asr_workflow(request, project)
+        else:
+            # Default manual transcription workflow
+            return self._handle_manual_workflow(request, project)
+    
+    def _handle_manual_workflow(self, request, project):
+        # Original logic for manual transcription
+        base_queryset = AudioChunk.objects.filter(project=project)
         
         total_choices = 6  # Total number of boolean fields
 
@@ -671,12 +688,10 @@ class ChunksForTranscriptionView(APIView):
             total_boolean_sum=Subquery(evaluation_summary.values("total_boolean_sum")),
         )
 
-        # NEW LOGIC:
-        # 1. Chunks with evaluation_count ≥ 2 (instead of 3)
-        # 2. Chunks with total_boolean_sum = 0 (no issues flagged)
+        # Chunks with evaluation_count ≥ 2 and no issues flagged
         chunks_for_transcription = chunks.filter(
-            evaluation_count__gte=2,  # Changed from 3 to 2
-            total_boolean_sum=0       # Only include chunks with no issues flagged
+            evaluation_count__gte=2,
+            total_boolean_sum=0
         )
         
         # Helper function to get full URL
@@ -692,6 +707,34 @@ class ChunksForTranscriptionView(APIView):
         for chunk in resultingChunks:
             chunk['file_url'] = get_full_url(AudioChunk.objects.get(unique_id=chunk['unique_id']))
 
+        return Response({
+            "chunks_for_transcription": resultingChunks
+        })
+    
+    def _handle_asr_workflow(self, request, project):
+        # Logic for ASR correction workflow
+        # This should mimic or reuse the logic from AudioChunkListCreateView
+        
+        # Get all chunks for this project
+        chunks = AudioChunk.objects.filter(project=project)
+        
+        # For ASR workflow, we don't need evaluation requirements
+        # We can directly use all chunks that have been ASR processed
+        
+        # You may need to add a field to AudioChunk to track ASR processing status
+        # For now, assuming all chunks in an ASR project are eligible
+        
+        # Helper function to get full URL
+        def get_full_url(chunk):
+            return request.build_absolute_uri(f"/shared/{chunk.chunk_file}")
+        
+        # Serialize chunks
+        resultingChunks = AudioChunkSerializer(chunks, many=True).data
+        
+        # Append full URL for chunk_file
+        for chunk in resultingChunks:
+            chunk['file_url'] = get_full_url(AudioChunk.objects.get(unique_id=chunk['unique_id']))
+        
         return Response({
             "chunks_for_transcription": resultingChunks
         })
